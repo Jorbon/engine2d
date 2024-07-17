@@ -1,3 +1,22 @@
+use std::ops::{Add, Div, Mul, Sub};
+
+
+
+pub fn lerp<T, U>(a: T, b: T, t: U) -> T
+where
+	T: Copy + Sub + Add<<<T as Sub>::Output as Mul<U>>::Output, Output = T>,
+	<T as Sub>::Output: Mul<U>
+{
+	a + (b - a) * t
+}
+
+pub fn prel<T, U>(a: T, b: T, y: T) -> U
+where
+	T: Copy + Sub,
+	<T as Sub>::Output: Div<Output = U>
+{
+	(y - a) / (b - a)
+}
 
 
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
@@ -17,6 +36,7 @@ impl Vec2 {
 	#[inline] pub fn is_zero(self) -> bool { self.0 == 0.0 && self.1 == 0.0 }
 	#[inline] pub fn x(self) -> f32 { self.0 }
 	#[inline] pub fn y(self) -> f32 { self.1 }
+	#[inline] pub fn vec3_xy(self) -> Vec3 { Vec3(self.0, self.1, 0.0) }
 	pub const ZERO: Self = Self(0.0, 0.0);
 }
 
@@ -48,28 +68,28 @@ impl Vec3 {
 }
 
 
-impl std::ops::Add for Vec2 { type Output = Self; #[inline] fn add(self, rhs: Self) -> Self::Output { Self(self.0 + rhs.0, self.1 + rhs.1) } }
+impl Add for Vec2 { type Output = Self; #[inline] fn add(self, rhs: Self) -> Self::Output { Self(self.0 + rhs.0, self.1 + rhs.1) } }
 impl std::ops::AddAssign for Vec2 { #[inline] fn add_assign(&mut self, rhs: Self) { *self = *self + rhs; } }
-impl std::ops::Sub for Vec2 { type Output = Self; #[inline] fn sub(self, rhs: Self) -> Self::Output { Self(self.0 - rhs.0, self.1 - rhs.1) } }
+impl Sub for Vec2 { type Output = Self; #[inline] fn sub(self, rhs: Self) -> Self::Output { Self(self.0 - rhs.0, self.1 - rhs.1) } }
 impl std::ops::SubAssign for Vec2 { #[inline] fn sub_assign(&mut self, rhs: Self) { *self = *self - rhs; } }
 impl std::ops::Neg for Vec2 { type Output = Self; #[inline] fn neg(self) -> Self::Output { Self(-self.0, -self.1) } }
-impl std::ops::Mul<f32> for Vec2 { type Output = Self; #[inline] fn mul(self, rhs: f32) -> Self::Output { Self(self.0 * rhs, self.1 * rhs) } }
+impl Mul<f32> for Vec2 { type Output = Self; #[inline] fn mul(self, rhs: f32) -> Self::Output { Self(self.0 * rhs, self.1 * rhs) } }
 impl std::ops::MulAssign<f32> for Vec2 { #[inline] fn mul_assign(&mut self, rhs: f32) { *self = *self * rhs; } }
-impl std::ops::Mul<Vec2> for f32 { type Output = Vec2; #[inline] fn mul(self, rhs: Vec2) -> Self::Output { rhs * self } }
+impl Mul<Vec2> for f32 { type Output = Vec2; #[inline] fn mul(self, rhs: Vec2) -> Self::Output { rhs * self } }
 impl std::ops::Div<f32> for Vec2 { type Output = Self; #[inline] fn div(self, rhs: f32) -> Self::Output { self * (1.0/rhs) } }
 impl std::ops::DivAssign<f32> for Vec2 { #[inline] fn div_assign(&mut self, rhs: f32) { *self = *self / rhs; } }
 impl std::ops::Div<Vec2> for f32 { type Output = Vec2; #[inline] fn div(self, rhs: Vec2) -> Self::Output { Vec2(self / rhs.0, self / rhs.1) } }
 impl std::ops::Rem<Vec2> for Vec2 { type Output = Self; #[inline] fn rem(self, rhs: Self) -> Self::Output { Self(self.0 % rhs.0, self.1 % rhs.1) } }
 impl std::ops::Rem<f32> for Vec2 { type Output = Self; #[inline] fn rem(self, rhs: f32) -> Self::Output { Self(self.0 % rhs, self.1 % rhs) } }
 
-impl std::ops::Add for Vec3 { type Output = Self; #[inline] fn add(self, rhs: Self) -> Self::Output { Self(self.0 + rhs.0, self.1 + rhs.1, self.2 + rhs.2) } }
+impl Add for Vec3 { type Output = Self; #[inline] fn add(self, rhs: Self) -> Self::Output { Self(self.0 + rhs.0, self.1 + rhs.1, self.2 + rhs.2) } }
 impl std::ops::AddAssign for Vec3 { #[inline] fn add_assign(&mut self, rhs: Self) { *self = *self + rhs; } }
-impl std::ops::Sub for Vec3 { type Output = Self; #[inline] fn sub(self, rhs: Self) -> Self::Output { Self(self.0 - rhs.0, self.1 - rhs.1, self.2 - rhs.2) } }
+impl Sub for Vec3 { type Output = Self; #[inline] fn sub(self, rhs: Self) -> Self::Output { Self(self.0 - rhs.0, self.1 - rhs.1, self.2 - rhs.2) } }
 impl std::ops::SubAssign for Vec3 { #[inline] fn sub_assign(&mut self, rhs: Self) { *self = *self - rhs; } }
 impl std::ops::Neg for Vec3 { type Output = Self; #[inline] fn neg(self) -> Self::Output { Self(-self.0, -self.1, -self.2) } }
-impl std::ops::Mul<f32> for Vec3 { type Output = Self; #[inline] fn mul(self, rhs: f32) -> Self::Output { Self(self.0 * rhs, self.1 * rhs, self.2 * rhs) } }
+impl Mul<f32> for Vec3 { type Output = Self; #[inline] fn mul(self, rhs: f32) -> Self::Output { Self(self.0 * rhs, self.1 * rhs, self.2 * rhs) } }
 impl std::ops::MulAssign<f32> for Vec3 { #[inline] fn mul_assign(&mut self, rhs: f32) { *self = *self * rhs; } }
-impl std::ops::Mul<Vec3> for f32 { type Output = Vec3; #[inline] fn mul(self, rhs: Vec3) -> Self::Output { rhs * self } }
+impl Mul<Vec3> for f32 { type Output = Vec3; #[inline] fn mul(self, rhs: Vec3) -> Self::Output { rhs * self } }
 impl std::ops::Div<f32> for Vec3 { type Output = Self; #[inline] fn div(self, rhs: f32) -> Self::Output { self * (1.0/rhs) } }
 impl std::ops::DivAssign<f32> for Vec3 { #[inline] fn div_assign(&mut self, rhs: f32) { *self = *self / rhs; } }
 impl std::ops::Div<Vec3> for f32 { type Output = Vec3; #[inline] fn div(self, rhs: Vec3) -> Self::Output { Vec3(self / rhs.0, self / rhs.1, self / rhs.2) } }

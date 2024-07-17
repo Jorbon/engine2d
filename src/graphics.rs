@@ -2,8 +2,8 @@ use glium::{glutin::surface::WindowSurface, program::ProgramCreationInput, textu
 
 
 
-pub fn load_texture(display: &Display<WindowSurface>, path: &'static str) -> SrgbTexture2d {
-    let image = image::open(&(String::from("assets/textures/") + path + ".png")).unwrap();
+pub fn load_texture(display: &Display<WindowSurface>, path: &str) -> SrgbTexture2d {
+    let image = image::open(&format!("assets/textures/{path}.png")).unwrap();
     use image::GenericImageView;
     SrgbTexture2d::new(display, RawImage2d::from_raw_rgba(image.to_rgba8().into_raw(), image.dimensions())).unwrap()
 }
@@ -21,13 +21,13 @@ pub fn blit_texture(target: &mut Frame, texture: &Texture2d) {
     );
 }
 
-pub fn load_shader_program(display: &Display<WindowSurface>, vert_shader: &'static str, frag_shader: &'static str) -> glium::Program {
+pub fn load_shader_program(display: &Display<WindowSurface>, vert_shader: &str, frag_shader: &str) -> glium::Program {
     glium::Program::new(display, ProgramCreationInput::SourceCode {
-        vertex_shader: &std::fs::read_to_string(String::from("src/shaders/") + vert_shader + ".vert").unwrap(),
+        vertex_shader: &std::fs::read_to_string(format!("src/shaders/{vert_shader}.vert")).unwrap(),
         tessellation_control_shader: None,
         tessellation_evaluation_shader: None,
         geometry_shader: None,
-        fragment_shader: &std::fs::read_to_string(String::from("src/shaders/") + frag_shader + ".frag").unwrap(),
+        fragment_shader: &std::fs::read_to_string(format!("src/shaders/{frag_shader}.frag")).unwrap(),
         transform_feedback_varyings: None,
         outputs_srgb: false,
         uses_point_size: false,
