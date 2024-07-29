@@ -10,9 +10,9 @@ use crate::{load_texture, vec::*};
 pub enum Direction { Up, Down, Left, Right }
 
 pub struct Entity {
-    pub position: Vec3,
-    pub velocity: Vec3,
-    pub size: Vec3,
+    pub position: Vec3<f32>,
+    pub velocity: Vec3<f32>,
+    pub size: Vec3<f32>,
     pub direction: Direction,
     pub ground_speed: f32,
 	pub air_speed: f32,
@@ -57,14 +57,14 @@ impl SpriteSet {
 
 
 impl Entity {
-	pub fn new(position: Vec3, size: Vec3, sprites: SpriteSet) -> Self {
+	pub fn new(position: Vec3<f32>, size: Vec3<f32>, sprites: SpriteSet) -> Self {
 		Self {
 			position,
 			velocity: Vec3(0.0, 0.0, 0.0),
 			size,
 			direction: Direction::Down,
 			ground_speed: 5.0,
-			air_speed: 200.0,
+			air_speed: 12.0,
 			water_speed: 3.0,
 			ground_acceleration: 60.0,
 			air_acceleration: 4.0,
@@ -83,7 +83,7 @@ impl Entity {
 		}
 	}
 	
-	pub fn input_move(&mut self, mut input: Vec3, dt: f32) {
+	pub fn input_move(&mut self, mut input: Vec3<f32>, dt: f32) {
 		if self.status == EntityStatus::Grounded {
 			input.2 = 0.0;
 		}
@@ -118,7 +118,7 @@ impl Entity {
 	
 	pub fn jump(&mut self) {
 		if self.status == EntityStatus::Grounded {
-			self.velocity.2 = 3.0;
+			self.velocity.2 = 2.0;
 			self.status = EntityStatus::Falling;
 		}
 	}

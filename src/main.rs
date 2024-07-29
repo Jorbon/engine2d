@@ -1,13 +1,15 @@
-use winit::{dpi::LogicalSize, event::{Event, KeyEvent, MouseButton, WindowEvent}, keyboard::{KeyCode, PhysicalKey}, window::{Icon, WindowBuilder}};
-use glium::{index::PrimitiveType, texture::{MipmapsOption, UncompressedUintFormat, UnsignedTexture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, IndexBuffer, Surface, VertexBuffer};
+use winit::{dpi::PhysicalSize, event::{Event, KeyEvent, MouseButton, WindowEvent}, keyboard::{KeyCode, PhysicalKey}, window::{Icon, WindowBuilder}};
+use glium::{framebuffer::SimpleFrameBuffer, index::PrimitiveType, texture::{MipmapsOption, Texture2d, UncompressedUintFormat, UnsignedTexture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, Blend, BlendingFunction, DrawParameters, IndexBuffer, LinearBlendingFactor, Surface, VertexBuffer};
 
 #[allow(dead_code)] mod vec;
 #[allow(dead_code)] mod entity;
 #[allow(dead_code)] mod graphics;
+#[allow(dead_code)] mod tiles;
 
 use vec::*;
 use entity::*;
 use graphics::*;
+use tiles::*;
 
 
 
@@ -21,7 +23,7 @@ fn main() {
 		// .with_fullscreen(Some(Fullscreen::Borderless(None)))
 		.with_maximized(true)
 		// .with_inner_size(LogicalSize { width: 300, height: 300 })
-		// .with_transparent(true)
+		.with_transparent(true)
 		.with_decorations(false)
 		.with_resizable(false)
 		// .with_window_level(winit::window::WindowLevel::AlwaysOnTop)
@@ -32,25 +34,27 @@ fn main() {
 	let mut tilemap_program = load_shader_program(&display, "tilemap", "tilemap");
 	let _screen_texture_program = load_shader_program(&display, "screen_rectangle", "rectangle");
 	let world_texture_program = load_shader_program(&display, "world_rectangle", "rectangle");
+	let mut post_program = load_shader_program(&display, "default", "post_process");
 	
-	let rect_vertex_buffer = VertexBuffer::new(&display, &[Vec2(0.0, 0.0), Vec2(1.0, 0.0), Vec2(1.0, 1.0), Vec2(0.0, 1.0)]).unwrap();
+	let rect_vertex_buffer = VertexBuffer::new(&display, &[Vec2(0.0f32, 0.0), Vec2(1.0, 0.0), Vec2(1.0, 1.0), Vec2(0.0, 1.0)]).unwrap();
 	let rect_index_buffer = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &[0, 1, 2, 0, 2, 3u8]).unwrap();
 	
 	
-	
-	let LogicalSize { width: window_width, height: window_height }: LogicalSize<f32> = window.inner_size().to_logical(window.scale_factor());
-	let mut aspect_ratio = window_height / window_width;
+	let PhysicalSize { width: window_width, height: window_height } = window.inner_size();
+	let mut aspect_ratio = window_height as f32 / window_width as f32;
 	
 	let mut camera_position = Vec3(0.0, 0.0, 0.0);
 	let mut tile_size = 1.0/40.0;
 	
+	let mut screen_texture = Texture2d::empty(&display, window_width, window_height).unwrap();
+	
 	let tilemap_texture = load_texture(&display, "tilemap");
 	
-	
+	let mut cells: Vec<Cell> = vec![];
 	let mut entities = vec![];
 	
 	entities.push(Entity::new(
-		Vec3(0.0, 0.0, 0.0),
+		Vec3(0.5, 0.5, 0.0),
 		Vec3(0.75, 0.75, 0.75),
 		SpriteSet::load(&display, "player")
 	));
@@ -60,6 +64,9 @@ fn main() {
 	let mut key_a = false;
 	let mut key_s = false;
 	let mut key_d = false;
+	
+	let mut _key_shift = false;
+	let mut key_ctrl = false;
 	
 	let mut previous_frame_time = std::time::Instant::now();
 	
@@ -77,8 +84,8 @@ fn main() {
 					window_target.exit();
 				}
 				WindowEvent::Resized(physical_size) => {
-					let LogicalSize { width: window_width, height: window_height }: LogicalSize<f32> = physical_size.to_logical(window.scale_factor());
-					aspect_ratio = window_height / window_width;
+					aspect_ratio = physical_size.height as f32 / physical_size.width as f32;
+					screen_texture = Texture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
 				}
 				WindowEvent::CursorMoved { position: _, device_id: _ } => {
 					
@@ -98,6 +105,8 @@ fn main() {
 						KeyCode::KeyS => key_s = state.is_pressed(),
 						KeyCode::KeyA => key_a = state.is_pressed(),
 						KeyCode::KeyD => key_d = state.is_pressed(),
+						KeyCode::ShiftLeft | KeyCode::ShiftRight => _key_shift = state.is_pressed(),
+						KeyCode::ControlLeft | KeyCode::ControlRight => key_ctrl = state.is_pressed(),
 						KeyCode::Space => if state.is_pressed() && !repeat {
 							entities[0].jump();
 						}
@@ -119,8 +128,9 @@ fn main() {
 						KeyCode::Equal => if state.is_pressed() {
 							tile_size *= 1.1;
 						}
-						KeyCode::KeyR => if state.is_pressed() {
+						KeyCode::KeyR => if state.is_pressed() && key_ctrl {
 							tilemap_program = load_shader_program(&display, "tilemap", "tilemap");
+							post_program = load_shader_program(&display, "default", "post_process");
 						}
 						KeyCode::Escape => if state.is_pressed() {
 							window_target.exit();
@@ -133,7 +143,7 @@ fn main() {
 					let dt = now.duration_since(previous_frame_time).as_secs_f32();
 					previous_frame_time = now;
 					
-					let mut dp = Vec3::ZERO;
+					let mut dp = Vec3(0.0f32, 0.0, 0.0);
 					if key_w { dp.1 -= 1.0; }
 					if key_s { dp.1 += 1.0; }
 					if key_a { dp.0 -= 1.0; }
@@ -146,56 +156,115 @@ fn main() {
 						entity.physics_step(dt);
 					}
 					
-					// if entities[0].position.0 > 20.0 {
-					// 	entities[0].position.0 -= 40.0;
-					// } else if entities[0].position.0 < -20.0 {
-					// 	entities[0].position.0 += 40.0;
-					// }
+					
+					
+					let cell_position = entities[0].position.xy() / CELL_WIDTH as f32;
+					let cell_corner = Vec2(cell_position.x().round() as isize, cell_position.y().round() as isize);
+					let mut nearby_cells = [
+						(cell_corner + Vec2(-1, -1), false),
+						(cell_corner + Vec2( 0, -1), false),
+						(cell_corner + Vec2(-1,  0), false),
+						(cell_corner + Vec2( 0,  0), false),
+					];
+					
+					for i in (0..cells.len()).rev() {
+						let mut nearby = false;
+						for nc in &mut nearby_cells {
+							if nc.1 { continue }
+							if nc.0 == cells[i].location {
+								nc.1 = true;
+								nearby = true;
+								break
+							}
+						}
+						if !nearby {
+							cells.swap_remove(i);
+						}
+					}
+					
+					for nc in nearby_cells {
+						if nc.1 { continue }
+						cells.push(Cell::new(nc.0));
+					}
+					
 					
 					
 					camera_position = entities[0].position;
 					
 					let screen_width_in_tiles = 1.0 / tile_size;
 					
-					let render_size = screen_width_in_tiles * Vec2(1.0, aspect_ratio);
-					let render_position = camera_position.xy() - 0.5 * render_size;
+					let render_size = Vec2(1.0, aspect_ratio) * screen_width_in_tiles;
+					let render_position = camera_position.xy() - render_size * 0.5;
 					
-					let mut tile_data_buffer = vec![];
-					for y in 0..=render_size.y().ceil() as u32 {
-						tile_data_buffer.push(vec![]);
-						for x in 0..=render_size.x().ceil() as u32 {
-							tile_data_buffer[y as usize].push(((x as i32 + render_position.x().floor() as i32) as u16, (y as i32 + render_position.y().floor() as i32) as u16));
-						}
-					}
+					let x_size = render_size.x().ceil() as usize + 1;
+					let y_size = render_size.y().ceil() as usize + 1;
+					let mut tile_data_buffer = vec![vec![(0, 0); x_size]; y_size];
 					
-					let tile_data_texture = UnsignedTexture2d::with_format(&display, tile_data_buffer, UncompressedUintFormat::U16U16, MipmapsOption::NoMipmap).unwrap();
-					
-					
-					
-					
-					let mut target = display.draw();
+					let mut target = SimpleFrameBuffer::new(&display, &screen_texture).unwrap();
 					target.clear_color(0.0, 0.0, 0.0, 0.0);
 					
-					target.draw(&rect_vertex_buffer, &rect_index_buffer, &tilemap_program, &UniformsStorage::
-						 new("aspect_ratio", aspect_ratio)
-						.add("screen_width_in_tiles", screen_width_in_tiles)
-						.add("offset", ((render_position % 1.0) + Vec2(1.0, 1.0)) % 1.0)
-						.add("tile_data_texture", &tile_data_texture)
-						.add("tilemap_texture", Sampler(&tilemap_texture, SamplerBehavior {
-							wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
-							minify_filter: MinifySamplerFilter::Linear,
-							magnify_filter: MagnifySamplerFilter::Nearest,
-							depth_texture_comparison: None,
-							max_anisotropy: 1,
-						}))
-					, &glium::DrawParameters::default()).unwrap();
+					
+					for z in 0..4 {
+						let render_position = render_position + Vec2(0.0, 0.7 * z as f32);
+						
+						let x_start = render_position.x().floor() as isize;
+						let y_start = render_position.y().floor() as isize;
+						let x_end = x_start + x_size as isize;
+						let y_end = y_start + y_size as isize;
+						
+						for cell in &cells {
+							let cell_start = cell.location * CELL_WIDTH as isize;
+							let cell_end = cell_start + Vec2::all(CELL_WIDTH as isize);
+							let x_start_cell = isize::max(x_start, cell_start.x());
+							let y_start_cell = isize::max(y_start, cell_start.y());
+							let x_end_cell = isize::min(x_end, cell_end.x());
+							let y_end_cell = isize::min(y_end, cell_end.y());
+							
+							if x_end_cell <= x_start_cell || y_end_cell <= y_start_cell { continue }
+							
+							for y in y_start_cell..y_end_cell {
+								for x in x_start_cell..x_end_cell {
+									tile_data_buffer[(y - y_start) as usize][(x - x_start) as usize] = cell.tiles[(y - cell_start.y()) as usize][(x - cell_start.x()) as usize][z].get_uv();
+								}
+							}
+						}
+						
+						let tile_data_texture = UnsignedTexture2d::with_format(&display, tile_data_buffer.clone(), UncompressedUintFormat::U16U16, MipmapsOption::NoMipmap).unwrap();
+						
+						target.draw(&rect_vertex_buffer, &rect_index_buffer, &tilemap_program, &UniformsStorage::
+							 new("aspect_ratio", aspect_ratio)
+							.add("screen_width_in_tiles", screen_width_in_tiles)
+							.add("offset", ((render_position % 1.0) + Vec2(1.0, 1.0)) % 1.0)
+							.add("tile_data_texture", &tile_data_texture)
+							.add("tilemap_texture", Sampler(&tilemap_texture, SamplerBehavior {
+								wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
+								minify_filter: MinifySamplerFilter::Linear,
+								magnify_filter: MagnifySamplerFilter::Nearest,
+								depth_texture_comparison: None,
+								max_anisotropy: 1,
+							}))
+						, &DrawParameters {
+							blend: Blend {
+								color: BlendingFunction::Addition {
+									source: LinearBlendingFactor::SourceAlpha,
+									destination: LinearBlendingFactor::OneMinusSourceAlpha,
+								},
+								alpha: BlendingFunction::Addition {
+									source: LinearBlendingFactor::One,
+									destination: LinearBlendingFactor::OneMinusSourceAlpha,
+								},
+								constant_value: (0.0, 0.0, 0.0, 0.0)
+							},
+							..Default::default()
+						}).unwrap();
+					}
 					
 					
-					let render_size_inverse = 1.0 / render_size;
+					let render_size_inverse = Vec2(1.0 / render_size.x(), 1.0 / render_size.y());
 					
 					entities.iter().rev().for_each(|entity| {
 						target.draw(&rect_vertex_buffer, &rect_index_buffer, &world_texture_program, &UniformsStorage::
-							new("texture_position", entity.position.xy() + Vec2(0.0, -0.7 * entity.position.z()) - 0.5 * entity.size.xy())
+							new("texture_position", entity.position.xy() + Vec2(0.0, entity.position.z() * -0.7) - entity.size.xy() * 0.5)
 						   .add("texture_size", entity.size.xy())
 						   .add("render_position", render_position)
 						   .add("render_size_inverse", render_size_inverse)
@@ -206,13 +275,27 @@ fn main() {
 							   depth_texture_comparison: None,
 							   max_anisotropy: 1,
 						   }))
-						, &glium::DrawParameters {
-							blend: glium::Blend::alpha_blending(),
+						, &DrawParameters {
+							blend: Blend::alpha_blending(),
 							..Default::default()
 						}).unwrap();
 					});
 					
-					target.finish().unwrap();
+					
+					let mut display_target = display.draw();
+					display_target.draw(&rect_vertex_buffer, &rect_index_buffer, &post_program, &UniformsStorage::
+						 new("aspect_ratio", aspect_ratio)
+						.add("screen_texture", Sampler(&screen_texture, SamplerBehavior {
+							wrap_function: (SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp),
+							minify_filter: MinifySamplerFilter::Nearest,
+							magnify_filter: MagnifySamplerFilter::Nearest,
+							depth_texture_comparison: None,
+							max_anisotropy: 1
+						}))
+					, &DrawParameters::default()).unwrap();
+					
+					display_target.finish().unwrap();
+					
 					
 				}
 				_ => ()

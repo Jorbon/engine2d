@@ -13,5 +13,8 @@ void main() {
 	vec2 sub_tile_position = mod(world_position, 1.0);
 	
 	uvec4 tile_data = texelFetch(tile_data_texture, tile_position, 0);
-	color = texture(tilemap_texture, (sub_tile_position + tile_data.xy) / TEXTURE_DIMENSIONS);
+	if ((sub_tile_position.x + tile_data.x) / TEXTURE_DIMENSIONS < 0.0) {
+		color = vec4(1.0, 0.0, 0.0, 1.0);
+	}
+	else color = texelFetch(tilemap_texture, ivec2((sub_tile_position + tile_data.xy) * TEXTURE_DIMENSIONS), 0);
 }
