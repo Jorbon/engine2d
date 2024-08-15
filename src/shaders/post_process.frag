@@ -5,8 +5,28 @@ out vec4 color;
 
 uniform float aspect_ratio;
 uniform sampler2D screen_texture;
+uniform sampler2D data_texture;
+
+const vec3 kernel[8] = vec3[](
+	vec3(-1.0,  0.0, 1.0),
+	vec3( 1.0,  0.0, 1.0),
+	vec3( 0.0, -1.0, 1.0),
+	vec3( 0.0,  1.0, 1.0),
+	vec3(-2.0,  0.0, 0.5),
+	vec3( 2.0,  0.0, 0.5),
+	vec3( 0.0, -2.0, 0.5),
+	vec3( 0.0,  2.0, 0.5)
+);
 
 void main() {
 	vec4 c = texture(screen_texture, screen_position);
-	color = c;//vec4(1.0 - c.r, 1.0 - c.g, 1.0 - c.b, c.a);
+	
+	float z = texture(data_texture, screen_position).x;
+	
+	float shade = 0.0;
+	for (int i = 0; i < 8; i++) {
+		shade += clamp(texture(data_texture, screen_position + kernel[i].xy * 0.002 / vec2(1.0, aspect_ratio)).x - z, 0.0, 1.0) * kernel[i].z;
+	}
+	
+	color = vec4(c.rgb * (1.0 - shade * 0.7), c.a);
 }

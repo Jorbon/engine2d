@@ -1,18 +1,20 @@
 use winit::{dpi::PhysicalSize, event::{Event, KeyEvent, MouseButton, WindowEvent}, keyboard::{KeyCode, PhysicalKey}, window::{Icon, WindowBuilder}};
-use glium::{framebuffer::SimpleFrameBuffer, index::PrimitiveType, texture::{MipmapsOption, Texture2d, UncompressedUintFormat, UnsignedTexture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, Blend, BlendingFunction, DrawParameters, IndexBuffer, LinearBlendingFactor, Surface, VertexBuffer};
+use glium::{framebuffer::MultiOutputFrameBuffer, index::PrimitiveType, texture::{MipmapsOption, Texture2d, UncompressedUintFormat, UnsignedTexture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, Blend, BlendingFunction, DrawParameters, IndexBuffer, LinearBlendingFactor, Surface, VertexBuffer};
 
 #[allow(dead_code)] mod vec;
 #[allow(dead_code)] mod entity;
 #[allow(dead_code)] mod graphics;
 #[allow(dead_code)] mod tiles;
+#[allow(dead_code)] mod physics;
 
 use vec::*;
 use entity::*;
 use graphics::*;
 use tiles::*;
+use physics::*;
 
 
-
+const PROJECTION_OFFSET: f32 = 0.5;
 
 
 
@@ -32,8 +34,8 @@ fn main() {
 	
 	
 	let mut tilemap_program = load_shader_program(&display, "tilemap", "tilemap");
-	let _screen_texture_program = load_shader_program(&display, "screen_rectangle", "rectangle");
-	let world_texture_program = load_shader_program(&display, "world_rectangle", "rectangle");
+	let _screen_texture_program = load_shader_program(&display, "screen_rectangle", "screen_rectangle");
+	let world_texture_program = load_shader_program(&display, "world_rectangle", "world_rectangle");
 	let mut post_program = load_shader_program(&display, "default", "post_process");
 	
 	let rect_vertex_buffer = VertexBuffer::new(&display, &[Vec2(0.0f32, 0.0), Vec2(1.0, 0.0), Vec2(1.0, 1.0), Vec2(0.0, 1.0)]).unwrap();
@@ -43,18 +45,18 @@ fn main() {
 	let PhysicalSize { width: window_width, height: window_height } = window.inner_size();
 	let mut aspect_ratio = window_height as f32 / window_width as f32;
 	
-	let mut camera_position = Vec3(0.0, 0.0, 0.0);
 	let mut tile_size = 1.0/40.0;
 	
 	let mut screen_texture = Texture2d::empty(&display, window_width, window_height).unwrap();
+	let mut data_texture = Texture2d::empty(&display, window_width, window_height).unwrap();
 	
 	let tilemap_texture = load_texture(&display, "tilemap");
 	
-	let mut cells: Vec<Cell> = vec![];
+	let mut cells: Vec<(Vec3<isize>, Cell)> = vec![];
 	let mut entities = vec![];
 	
 	entities.push(Entity::new(
-		Vec3(0.5, 0.5, 0.0),
+		Vec3(0.5, 0.5, 10.0),
 		Vec3(0.75, 0.75, 0.75),
 		SpriteSet::load(&display, "player")
 	));
@@ -86,6 +88,7 @@ fn main() {
 				WindowEvent::Resized(physical_size) => {
 					aspect_ratio = physical_size.height as f32 / physical_size.width as f32;
 					screen_texture = Texture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
+					data_texture = Texture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
 				}
 				WindowEvent::CursorMoved { position: _, device_id: _ } => {
 					
@@ -128,9 +131,15 @@ fn main() {
 						KeyCode::Equal => if state.is_pressed() {
 							tile_size *= 1.1;
 						}
-						KeyCode::KeyR => if state.is_pressed() && key_ctrl {
-							tilemap_program = load_shader_program(&display, "tilemap", "tilemap");
-							post_program = load_shader_program(&display, "default", "post_process");
+						KeyCode::KeyR => if state.is_pressed() {
+							if key_ctrl {
+								tilemap_program = load_shader_program(&display, "tilemap", "tilemap");
+								post_program = load_shader_program(&display, "default", "post_process");
+							} else {
+								entities[0].position = Vec3(0.5, 0.5, 10.0);
+								entities[0].velocity = Vec3(0.0, 0.0, 0.0);
+								entities[0].status = EntityStatus::Grounded(Vec3(0.0, 0.0, 1.0));
+							}
 						}
 						KeyCode::Escape => if state.is_pressed() {
 							window_target.exit();
@@ -143,7 +152,7 @@ fn main() {
 					let dt = now.duration_since(previous_frame_time).as_secs_f32();
 					previous_frame_time = now;
 					
-					let mut dp = Vec3(0.0f32, 0.0, 0.0);
+					let mut dp = Vec3(0.0, 0.0, 0.0f32);
 					if key_w { dp.1 -= 1.0; }
 					if key_s { dp.1 += 1.0; }
 					if key_a { dp.0 -= 1.0; }
@@ -153,25 +162,25 @@ fn main() {
 					}
 					
 					for entity in &mut entities {
-						entity.physics_step(dt);
+						entity.physics_step(&cells, dt);
 					}
 					
 					
 					
 					let cell_position = entities[0].position.xy() / CELL_WIDTH as f32;
-					let cell_corner = Vec2(cell_position.x().round() as isize, cell_position.y().round() as isize);
+					let cell_corner = Vec3(cell_position.x().round() as isize, cell_position.y().round() as isize, 0);
 					let mut nearby_cells = [
-						(cell_corner + Vec2(-1, -1), false),
-						(cell_corner + Vec2( 0, -1), false),
-						(cell_corner + Vec2(-1,  0), false),
-						(cell_corner + Vec2( 0,  0), false),
+						(cell_corner + Vec3(-1, -1, 0), false),
+						(cell_corner + Vec3( 0, -1, 0), false),
+						(cell_corner + Vec3(-1,  0, 0), false),
+						(cell_corner + Vec3( 0,  0, 0), false),
 					];
 					
 					for i in (0..cells.len()).rev() {
 						let mut nearby = false;
 						for nc in &mut nearby_cells {
 							if nc.1 { continue }
-							if nc.0 == cells[i].location {
+							if nc.0 == cells[i].0 {
 								nc.1 = true;
 								nearby = true;
 								break
@@ -184,36 +193,39 @@ fn main() {
 					
 					for nc in nearby_cells {
 						if nc.1 { continue }
-						cells.push(Cell::new(nc.0));
+						cells.push((nc.0, Cell::load(nc.0)));
 					}
 					
 					
 					
-					camera_position = entities[0].position;
 					
 					let screen_width_in_tiles = 1.0 / tile_size;
 					
-					let render_size = Vec2(1.0, aspect_ratio) * screen_width_in_tiles;
-					let render_position = camera_position.xy() - render_size * 0.5;
+					let render_size = Vec2(1.0, aspect_ratio) * screen_width_in_tiles + Vec2(0.0, 2.0 * PROJECTION_OFFSET);
+					let render_position = entities[0].position.xy() - Vec2(0.0, entities[0].position.z() * PROJECTION_OFFSET) - render_size * 0.5 - Vec2(0.0, 1.0 * PROJECTION_OFFSET);
 					
 					let x_size = render_size.x().ceil() as usize + 1;
 					let y_size = render_size.y().ceil() as usize + 1;
 					let mut tile_data_buffer = vec![vec![(0, 0); x_size]; y_size];
 					
-					let mut target = SimpleFrameBuffer::new(&display, &screen_texture).unwrap();
+					
+					let mut target = MultiOutputFrameBuffer::new(&display, [
+						("color", &screen_texture),
+						("data", &data_texture),
+					]).unwrap();
 					target.clear_color(0.0, 0.0, 0.0, 0.0);
 					
 					
-					for z in 0..4 {
-						let render_position = render_position + Vec2(0.0, 0.7 * z as f32);
+					for z in 0..CELL_HEIGHT {
+						let render_position = render_position + Vec2(0.0, PROJECTION_OFFSET * (z + 1) as f32);
 						
 						let x_start = render_position.x().floor() as isize;
 						let y_start = render_position.y().floor() as isize;
 						let x_end = x_start + x_size as isize;
 						let y_end = y_start + y_size as isize;
 						
-						for cell in &cells {
-							let cell_start = cell.location * CELL_WIDTH as isize;
+						for (location, cell) in &cells {
+							let cell_start = location.xy() << CELL_WIDTH_BITS;
 							let cell_end = cell_start + Vec2::all(CELL_WIDTH as isize);
 							let x_start_cell = isize::max(x_start, cell_start.x());
 							let y_start_cell = isize::max(y_start, cell_start.y());
@@ -224,7 +236,7 @@ fn main() {
 							
 							for y in y_start_cell..y_end_cell {
 								for x in x_start_cell..x_end_cell {
-									tile_data_buffer[(y - y_start) as usize][(x - x_start) as usize] = cell.tiles[(y - cell_start.y()) as usize][(x - cell_start.x()) as usize][z].get_uv();
+									tile_data_buffer[(y - y_start) as usize][(x - x_start) as usize] = cell.tiles[z][(y - cell_start.y()) as usize][(x - cell_start.x()) as usize].get_uv();
 								}
 							}
 						}
@@ -234,7 +246,8 @@ fn main() {
 						target.draw(&rect_vertex_buffer, &rect_index_buffer, &tilemap_program, &UniformsStorage::
 							 new("aspect_ratio", aspect_ratio)
 							.add("screen_width_in_tiles", screen_width_in_tiles)
-							.add("offset", ((render_position % 1.0) + Vec2(1.0, 1.0)) % 1.0)
+							.add("offset", render_position.modulo(1.0) + Vec2(0.0, 1.0 * PROJECTION_OFFSET))
+							.add("z", (z + 1) as f32 - entities[0].position.z())
 							.add("tile_data_texture", &tile_data_texture)
 							.add("tilemap_texture", Sampler(&tilemap_texture, SamplerBehavior {
 								wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
@@ -255,7 +268,7 @@ fn main() {
 								},
 								constant_value: (0.0, 0.0, 0.0, 0.0)
 							},
-							..Default::default()
+							.. Default::default()
 						}).unwrap();
 					}
 					
@@ -264,17 +277,25 @@ fn main() {
 					
 					entities.iter().rev().for_each(|entity| {
 						target.draw(&rect_vertex_buffer, &rect_index_buffer, &world_texture_program, &UniformsStorage::
-							new("texture_position", entity.position.xy() + Vec2(0.0, entity.position.z() * -0.7) - entity.size.xy() * 0.5)
-						   .add("texture_size", entity.size.xy())
-						   .add("render_position", render_position)
-						   .add("render_size_inverse", render_size_inverse)
-						   .add("tex", Sampler(entity.current_sprite(), SamplerBehavior {
-							   wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
-							   minify_filter: MinifySamplerFilter::Linear,
-							   magnify_filter: MagnifySamplerFilter::Nearest,
-							   depth_texture_comparison: None,
-							   max_anisotropy: 1,
-						   }))
+							 new("texture_position", entity.position.xy() + Vec2(0.0, entity.position.z() * -PROJECTION_OFFSET) - entity.size.xy() * 0.5)
+							.add("texture_size", entity.size.xy())
+							.add("render_position", render_position)
+							.add("render_size_inverse", render_size_inverse)
+							.add("z", entity.position.z() - entities[0].position.z() + 0.1)
+							.add("tex", Sampler(entity.current_sprite(), SamplerBehavior {
+								wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
+								minify_filter: MinifySamplerFilter::Linear,
+								magnify_filter: MagnifySamplerFilter::Nearest,
+								depth_texture_comparison: None,
+								max_anisotropy: 1,
+						    }))
+							.add("data_texture", Sampler(&data_texture, SamplerBehavior {
+								wrap_function: (SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp),
+								minify_filter: MinifySamplerFilter::Nearest,
+								magnify_filter: MagnifySamplerFilter::Nearest,
+								depth_texture_comparison: None,
+								max_anisotropy: 1
+							}))
 						, &DrawParameters {
 							blend: Blend::alpha_blending(),
 							..Default::default()
@@ -286,6 +307,13 @@ fn main() {
 					display_target.draw(&rect_vertex_buffer, &rect_index_buffer, &post_program, &UniformsStorage::
 						 new("aspect_ratio", aspect_ratio)
 						.add("screen_texture", Sampler(&screen_texture, SamplerBehavior {
+							wrap_function: (SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp),
+							minify_filter: MinifySamplerFilter::Nearest,
+							magnify_filter: MagnifySamplerFilter::Nearest,
+							depth_texture_comparison: None,
+							max_anisotropy: 1
+						}))
+						.add("data_texture", Sampler(&data_texture, SamplerBehavior {
 							wrap_function: (SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp),
 							minify_filter: MinifySamplerFilter::Nearest,
 							magnify_filter: MagnifySamplerFilter::Nearest,

@@ -1,63 +1,97 @@
-use crate::Vec2;
+use crate::Vec3;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Tile {
-	Air,
+pub enum RampDirection {
+	North(NorthSouthAdjacent),
+	South(NorthSouthAdjacent),
+	East(EastWestAdjacent),
+	West(EastWestAdjacent),
+	Up(UpDownAdjacent),
+	Down(UpDownAdjacent),
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)] pub enum NorthSouthAdjacent { East, West, Up, Down }
+#[derive(Copy, Clone, Debug, Eq, PartialEq)] pub enum EastWestAdjacent { North, South, Up, Down }
+#[derive(Copy, Clone, Debug, Eq, PartialEq)] pub enum UpDownAdjacent { North, South, East, West }
+
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Material {
 	Grass,
 	Mud,
 	Dirt,
 	Stone,
-	Water,
 	Wood,
 	Brick,
-	Tile,
+	Tiles,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Tile {
+	Air,
+	Water,
+	Block(Material),
+	Ramp(Material, u16, u8),
 	HTrack,
 	VTrack,
 }
 
+pub use Material::*;
+pub use Tile::*;
+
 impl Tile {
 	pub fn get_uv(&self) -> (u16, u16) {
 		match self {
-			Tile::Air    => (0, 0),
-			Tile::Grass  => (1, 0),
-			Tile::Mud    => (2, 0),
-			Tile::Dirt   => (3, 0),
-			Tile::Stone  => (4, 0),
-			Tile::Water  => (5, 0),
-			Tile::Wood   => (0, 1),
-			Tile::Brick  => (1, 1),
-			Tile::Tile   => (2, 1),
-			Tile::HTrack => (0, 2),
-			Tile::VTrack => (1, 2),
+			Air    => (0, 0),
+			Water  => (5, 0),
+			Block(material) => match material {
+				Grass  => (1, 0),
+				Mud    => (2, 0),
+				Dirt   => (3, 0),
+				Stone  => (4, 0),
+				Wood   => (0, 1),
+				Brick  => (1, 1),
+				Tiles   => (2, 1),
+			}
+			Ramp(material, direction, level) => {
+				(10, 10)
+			}
+			HTrack => (0, 2),
+			VTrack => (1, 2),
 		}
 	}
 }
 
 
-pub const CELL_WIDTH: usize = 256;
-pub const CELL_HEIGHT: usize = 16;
+pub const CELL_WIDTH_BITS: u16 = 8;
+pub const CELL_HEIGHT_BITS: u16 = 4;
+pub const CELL_WIDTH: usize = 1 << CELL_WIDTH_BITS;
+pub const CELL_HEIGHT: usize = 1 << CELL_HEIGHT_BITS;
 
 pub struct Cell {
-	pub location: Vec2<isize>,
-	pub tiles: Box<[[[Tile; CELL_HEIGHT]; CELL_WIDTH]; CELL_WIDTH]>,
+	pub tiles: Box<[[[Tile; CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT]>,
 }
 
 impl Cell {
-	pub fn new(location: Vec2<isize>) -> Self {
-		let mut tiles = Box::new([[[Tile::Air; CELL_HEIGHT]; CELL_WIDTH]; CELL_WIDTH]);
+	pub fn load(_location: Vec3<isize>) -> Self {
+		let mut tiles = {
+			let ptr = Box::into_raw(vec![[[Air; CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT].into_boxed_slice()) as *mut [[[Tile; CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT];
+			unsafe { Box::from_raw(ptr) }
+		};
 		
 		for y in 0..CELL_WIDTH {
 			for x in 0..CELL_WIDTH {
-				tiles[x][y][0] = Tile::Grass;
-				tiles[x][y][1] = if (x + y) % 2 == 0 { Tile::Grass } else { Tile::Water };
-				tiles[x][y][2] = if (x + y) % 4 == 0 { Tile::Grass } else { Tile::Water };
-				tiles[x][y][3] = if (x + y) % 8 == 0 { Tile::Grass } else { Tile::Water };
-				tiles[x][y][4] = Tile::Water;
+				tiles[0][y][x] = Block(Stone);
+				tiles[1][y][x] = if (x + y) % 2 == 0 { Block(Mud) } else { Air };
+				tiles[2][y][x] = if (x + y) % 4 == 0 { Block(Dirt) } else { Air };
+				tiles[3][y][x] = if (x + y) % 8 == 0 { Block(Grass) } else { Air };
+				tiles[4][y][x] = Air;
 			}
 		}
 		
+		tiles[9][0][0] = Block(Stone);
+		
 		Self {
-			location,
 			tiles,
 		}
 	}

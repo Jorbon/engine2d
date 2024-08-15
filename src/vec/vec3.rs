@@ -1,6 +1,6 @@
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign};
 
-use super::{Sqrt, Vec2};
+use super::{Modulo, Sqrt, Vec2};
 
 #[derive(Copy, Clone, Default, Debug, PartialEq)]
 pub struct Vec3<T>(pub T, pub T, pub T);
@@ -143,6 +143,37 @@ impl<T, U> Rem<U> for Vec3<T> where
 	type Output = Vec3<<T as Rem<U>>::Output>;
 	fn rem(self, rhs: U) -> Self::Output { Vec3(self.0 % rhs, self.1 % rhs, self.2 % rhs) }
 }
+
+impl<T, U> Shl<U> for Vec3<T> where
+	T: Shl<U>,
+	U: Copy
+{
+	type Output = Vec3<<T as Shl<U>>::Output>;
+	fn shl(self, rhs: U) -> Self::Output { Vec3(self.0 << rhs, self.1 << rhs, self.2 << rhs) }
+}
+
+impl<T, U> ShlAssign<U> for Vec3<T> where
+	T: Copy + Shl<U, Output = T>,
+	U: Copy
+{ fn shl_assign(&mut self, rhs: U) { *self = *self << rhs } }
+
+impl<T, U> Shr<U> for Vec3<T> where
+	T: Shr<U>,
+	U: Copy
+{
+	type Output = Vec3<<T as Shr<U>>::Output>;
+	fn shr(self, rhs: U) -> Self::Output { Vec3(self.0 >> rhs, self.1 >> rhs, self.2 >> rhs) }
+}
+
+impl<T, U> ShrAssign<U> for Vec3<T> where
+	T: Copy + Shr<U, Output = T>,
+	U: Copy
+{ fn shr_assign(&mut self, rhs: U) { *self = *self >> rhs } }
+
+impl<T, U> Modulo<U> for Vec3<T> where
+	T: Modulo<U>,
+	U: Copy
+{ fn modulo(self, rhs: U) -> Self { Vec3(self.0.modulo(rhs), self.1.modulo(rhs), self.2.modulo(rhs)) } }
 
 
 
