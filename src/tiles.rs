@@ -53,7 +53,7 @@ impl Tile {
 				Brick  => (1, 1),
 				Tiles   => (2, 1),
 			}
-			Ramp(material, direction, level) => {
+			Ramp(_material, _direction, _level) => {
 				(10, 10)
 			}
 			HTrack => (0, 2),
@@ -67,6 +67,12 @@ pub const CELL_WIDTH_BITS: u16 = 8;
 pub const CELL_HEIGHT_BITS: u16 = 4;
 pub const CELL_WIDTH: usize = 1 << CELL_WIDTH_BITS;
 pub const CELL_HEIGHT: usize = 1 << CELL_HEIGHT_BITS;
+pub const CELL_XY_MASK: isize = CELL_WIDTH as isize - 1;
+pub const CELL_Z_MASK: isize = CELL_HEIGHT as isize - 1;
+
+pub const CELL_SIZE_BITS: Vec3<u16> = Vec3(CELL_WIDTH_BITS, CELL_WIDTH_BITS, CELL_HEIGHT_BITS);
+pub const CELL_SIZE: Vec3<isize> = Vec3(CELL_WIDTH as isize, CELL_WIDTH as isize, CELL_HEIGHT as isize);
+pub const CELL_MASK: Vec3<isize> = Vec3(CELL_XY_MASK, CELL_XY_MASK, CELL_Z_MASK);
 
 pub struct Cell {
 	pub tiles: Box<[[[Tile; CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT]>,
