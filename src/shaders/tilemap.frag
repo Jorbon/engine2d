@@ -14,6 +14,7 @@ void main() {
 	ivec2 tile_position = ivec2(world_position);
 	vec2 sub_tile_position = mod(world_position, 1.0);
 	
+	
 	uvec2 tile_data_above = texelFetch(tile_data_texture, ivec2(tile_position.x, tile_position.y - 1), 0).xy;
 	vec4 color_back = vec4(0.0, 0.0, 0.0, 0.0);
 	if (sub_tile_position.y <= 0.5) {

@@ -56,6 +56,9 @@ impl SpriteSet {
 
 
 
+const LOW_CORNER: Vec3<f64> = Vec3(-0.5, -0.5, 0.0);
+const HIGH_CORNER: Vec3<f64> = Vec3(0.5, 0.5, 1.0);
+
 const SURFACE_MARGIN: f64 = 1e-4;
 
 
@@ -76,6 +79,18 @@ impl Entity {
 			sprites,
 			movement_input: Vec3(0.0, 0.0, 0.0),
 			jump_input: false,
+		}
+	}
+	
+	pub fn current_sprite(&self) -> &SrgbTexture2d {
+		match &self.sprites {
+			SpriteSet::Static(sprite) => &sprite,
+			SpriteSet::Directional([up, down, left, right]) => match self.direction {
+				FacingDirection::Up => &up,
+				FacingDirection::Down => &down,
+				FacingDirection::Left => &left,
+				FacingDirection::Right => &right,
+			}
 		}
 	}
 	
@@ -118,139 +133,164 @@ impl Entity {
 	}
 	
 	pub fn physics_step(&mut self, cells: &HashMap<Vec3<isize>, Cell>, dt: f64) {
-		let force_direction = self.get_force_direction();
+		let mut normals = vec![];
 		
-		let mut surfaces = vec![];
+		let l = self.position + self.size.scale(LOW_CORNER);
+		let h = self.position + self.size.scale(HIGH_CORNER);
 		
-		let l = self.position - self.size.scale(Vec3(0.5, 0.5, 0.0));
-		let h = self.position + self.size.scale(Vec3(0.5, 0.5, 1.0));
-		
-		for x in ((l.x() - SURFACE_MARGIN).floor() as isize)..((h.x() + SURFACE_MARGIN).floor() as isize) {
-			for y in ((l.y() - SURFACE_MARGIN).floor() as isize)..((h.y() + SURFACE_MARGIN).floor() as isize) {
-				for z in ((l.z() - SURFACE_MARGIN).floor() as isize)..((h.z() + SURFACE_MARGIN).floor() as isize) {
-					let tile_pos = Vec3(x, y, z);
-					let cell_pos = tile_pos >> CELL_SIZE_BITS;
-					if let Some(cell) = cells.get(&cell_pos) {
-						match cell.tiles[(z & CELL_Z_MASK) as usize][(y & CELL_XY_MASK) as usize][(x & CELL_XY_MASK) as usize] {
-							Tile::Air | Tile::Water | Tile::HTrack | Tile::VTrack => (),
-							Tile::Block(_material) => {
-								let h_inset = h - tile_pos.as_type::<f64>();
-								let l_inset = (tile_pos + Vec3(1, 1, 1)).as_type::<f64>() - l;
-								
-								if h_inset.x() > SURFACE_MARGIN && l_inset.x() > SURFACE_MARGIN
-								&& h_inset.y() > SURFACE_MARGIN && l_inset.y() > SURFACE_MARGIN {
-									if h_inset.z().abs() < SURFACE_MARGIN {
-										self.position.2 = z as f64 - self.size.z();
-										surfaces.push(Vec3(0.0, 0.0, -1.0));
-									}
-									if l_inset.z().abs() < SURFACE_MARGIN {
-										self.position.2 = (z + 1) as f64;
-										surfaces.push(Vec3(0.0, 0.0, 1.0));
-									}
+		for tile_pos in Vec3Range::<isize, ZYX>::inclusive((l - Vec3::all(SURFACE_MARGIN)).floor_to(), (h + Vec3::all(SURFACE_MARGIN)).floor_to()) {
+			let cell_pos = tile_pos >> CELL_SIZE_BITS;
+			if let Some(cell) = cells.get(&cell_pos) {
+				match cell.tiles[(tile_pos & CELL_MASK).as_type()] {
+					Tile::Air | Tile::Water | Tile::HTrack | Tile::VTrack => (),
+					Tile::Block(_material) => {
+						let h_inset = h - tile_pos.as_type::<f64>();
+						let l_inset = (tile_pos + Vec3(1, 1, 1)).as_type::<f64>() - l;
+						
+						for (a, b, c) in [(Z, X, Y), (Y, X, Z), (X, Y, Z)] {
+							if h_inset[b] > SURFACE_MARGIN && l_inset[b] > SURFACE_MARGIN
+							&& h_inset[c] > SURFACE_MARGIN && l_inset[c] > SURFACE_MARGIN {
+								if h_inset[a].abs() < SURFACE_MARGIN {
+									self.position[a] = tile_pos[a] as f64 - self.size[a] * HIGH_CORNER[a];
+									normals.push(-Vec3::<f64>::unit(a));
 								}
-								
-								if h_inset.x() > SURFACE_MARGIN && l_inset.x() > SURFACE_MARGIN
-								&& h_inset.z() > SURFACE_MARGIN && l_inset.z() > SURFACE_MARGIN {
-									if h_inset.y().abs() < SURFACE_MARGIN {
-										self.position.1 = y as f64 - self.size.y() * 0.5;
-										surfaces.push(Vec3(0.0, -1.0, 0.0));
-									}
-									if l_inset.y().abs() < SURFACE_MARGIN {
-										self.position.1 = (y + 1) as f64 + self.size.y() * 0.5;
-										surfaces.push(Vec3(0.0, 1.0, 0.0));
-									}
+								if l_inset[a].abs() < SURFACE_MARGIN {
+									self.position[a] = (tile_pos[a] + 1) as f64 - self.size[a] * LOW_CORNER[a];
+									normals.push(Vec3::unit(a));
 								}
-								
-								if h_inset.y() > SURFACE_MARGIN && l_inset.y() > SURFACE_MARGIN
-								&& h_inset.z() > SURFACE_MARGIN && l_inset.z() > SURFACE_MARGIN {
-									if h_inset.x().abs() < SURFACE_MARGIN {
-										self.position.0 = x as f64 - self.size.x() * 0.5;
-										surfaces.push(Vec3(-1.0, 0.0, 0.0));
-									}
-									if l_inset.x().abs() < SURFACE_MARGIN {
-										self.position.0 = (x + 1) as f64 + self.size.x() * 0.5;
-										surfaces.push(Vec3(1.0, 0.0, 0.0));
-									}
-								}
-							}
-							Tile::Ramp(_material, direction, level) => {
-								
 							}
 						}
+					}
+					Tile::Ramp(_material, direction, level) => {
+						todo!()
 					}
 				}
 			}
 		}
 		
 		
-		if self.jump_input && surfaces.len() > 0 {
-			self.velocity += self.get_force_direction() * 2.0;
-		}
+		self.velocity += self.get_force_direction() * self.get_force_magnitude() * dt;
 		
 		self.velocity += self.movement_input * dt * 5.0;
 		
-		self.position += self.velocity * dt;
+		if self.jump_input && normals.len() > 0 {
+			self.velocity -= self.get_force_direction() * 2.0;
+		}
 		
-		// match self.status {
-		// 	EntityStatus::Grounded(_normal) => {
-		// 		if !self.velocity.is_zero() {
-		// 			self.velocity = self.velocity.normalize() * f64::max(self.velocity.length() - self.ground_acceleration * dt, 0.0);
-		// 			self.velocity *= 1.0 - self.velocity.length() * self.air_resistance * dt;
-		// 		}
-		// 	}
-		// 	EntityStatus::Falling => {
-		// 		self.velocity += force * dt;
-		// 		self.velocity *= 1.0 - self.velocity.length() * self.air_resistance * dt;
-		// 	}
-		// 	EntityStatus::Swimming => {
-		// 		self.velocity *= (0.5f64).powf(dt);
-		// 	}
-		// }
+		for normal in normals {
+			if self.velocity.dot(normal) < 0.0 {
+				self.velocity -= normal * self.velocity.dot(normal);
+			}
+		}
 		
-		// let mut first_collision = None;
-		// let mut first_collision_t = 1.0;
 		
-		// for corner in [
-		// 	Vec3(-0.5, -0.5, -0.0f64),
-		// 	Vec3( 0.5, -0.5, -0.0),
-		// 	Vec3(-0.5,  0.5, -0.0),
-		// 	Vec3( 0.5,  0.5, -0.0),
-		// 	Vec3(-0.5, -0.5,  1.0),
-		// 	Vec3( 0.5, -0.5,  1.0),
-		// 	Vec3(-0.5,  0.5,  1.0),
-		// 	Vec3( 0.5,  0.5,  1.0),
-		// ] {
-		// 	let current = self.position + self.size.scale(corner);
-		// 	let next = current + self.velocity * dt;
+		
+		let mut dt_remaining = dt;
+		
+		loop {
 			
-		// 	if let Some(collision) = raycast(cells, current, next, first_collision_t) {
-		// 		first_collision = Some(collision);
-		// 		first_collision_t = collision.0;
-		// 	}
-		// }
-		
-		
-		// if let Some((t, normal)) = first_collision {
-		// 	if self.velocity.dot(normal) > 0.0 { println!("collided backwards? {:?}, {:?}", self.velocity, normal); }
+			let mut first_collision = None;
+			let mut first_collision_t = dt_remaining;
 			
-		// 	self.position += self.velocity * t * dt;
-		// 	self.velocity -= normal * self.velocity.dot(normal);
-		// 	self.position += self.velocity * (1.0 - t) * dt;
+			let reversed = self.velocity.map(|v| v < 0.0);
+			let step = reversed.map(|r| match r { false => 1, true => -1 });
 			
-		// } else {
-		// 	self.position += self.velocity * dt;
-		// }
+			let main_corner = self.position + self.size.scale(Vec3::by_axis(|a| match reversed[a] { false => HIGH_CORNER[a], true => LOW_CORNER[a] }));
+			let far_corner = self.position + self.size.scale(Vec3::by_axis(|a| match reversed[a] { false => LOW_CORNER[a], true => HIGH_CORNER[a] }));
+			
+			let mut main_tile = Vec3::by_axis(|a| if reversed[a] { main_corner[a].floor() } else { main_corner[a].ceil() - 1.0 } as isize);
+			let far_tile = Vec3::by_axis(|a| if reversed[a] { far_corner[a].ceil() - 1.0 } else { far_corner[a].floor() } as isize);
+			
+			for (axis, check_axis) in [(Z, None), (Y, Some(Z)), (X, Some(Y))] {
+				if let Some(ca) = check_axis {
+					if main_tile[ca] == far_tile[ca] {
+						break
+					} else {
+						main_tile[ca] -= step[ca];
+					}
+				}
+				
+				for tile_pos in Vec3Range::<isize, ZYX>::inclusive(main_tile, far_tile.with(axis, main_tile[axis])) {
+					if let Some(collision) = self.test_collision(cells, tile_pos, first_collision_t) {
+						first_collision = Some(collision);
+						first_collision_t = collision.0;
+					}
+				}
+			}
+			
+			if first_collision.is_none() {
+				let mut current_tile = main_corner.floor_to::<isize>();
+				let mut next_tile_boundary = current_tile + reversed.map(|r| if r {0} else {1});
+				
+				loop {
+					let t_next = Vec3::by_axis(|a| prel(main_corner[a], main_corner[a] + self.velocity[a], next_tile_boundary[a] as f64));
+					let a = match (t_next.x() < t_next.y(), t_next.x() < t_next.z(), t_next.y() < t_next.z()) {
+						(true, true, _) => X,
+						(false, _, true) => Y,
+						(_, false, false) => Z,
+						_ => unreachable!()
+					};
+					if t_next[a] > dt_remaining { break }
+					current_tile += step.component(a);
+					next_tile_boundary += step.component(a);
+					
+					let current_t = t_next[a];
+					let current_main_pos = main_corner + self.velocity * current_t;
+					let current_far_pos = far_corner + self.velocity * current_t;
+					let main_tile = Vec3::by_axis(|a| if reversed[a] { current_main_pos[a].floor() } else { current_main_pos[a].ceil() - 1.0 } as isize).with(a, current_tile[a]);
+					let far_tile = Vec3::by_axis(|a| if reversed[a] { current_far_pos[a].ceil() - 1.0 } else { current_far_pos[a].floor() } as isize).with(a, current_tile[a]);
+					for tile_pos in Vec3Range::<isize, ZYX>::inclusive(main_tile, far_tile) {
+						if let Some(collision) = self.test_collision(cells, tile_pos, first_collision_t) {
+							first_collision = Some(collision);
+							first_collision_t = collision.0;
+						}
+					}
+				}
+			}
+			
+			if let Some((t, normal)) = first_collision {
+				self.position += self.velocity * t;
+				self.velocity -= normal * self.velocity.dot(normal);
+				dt_remaining -= t;
+				continue
+			} else {
+				self.position += self.velocity * dt_remaining;
+				break
+			}
+			
+		}
 	}
 	
-	pub fn current_sprite(&self) -> &SrgbTexture2d {
-		match &self.sprites {
-			SpriteSet::Static(sprite) => &sprite,
-			SpriteSet::Directional([up, down, left, right]) => match self.direction {
-				FacingDirection::Up => &up,
-				FacingDirection::Down => &down,
-				FacingDirection::Left => &left,
-				FacingDirection::Right => &right,
+	pub fn test_collision(&self, cells: &HashMap<Vec3<isize>, Cell>, tile_pos: Vec3<isize>, max_t: f64) -> Option<(f64, Vec3<f64>)> {
+		let cell_pos = tile_pos >> CELL_SIZE_BITS;
+		if let Some(cell) = cells.get(&cell_pos) {
+			match cell.tiles[(tile_pos & CELL_MASK).as_type()] {
+				Tile::Air | Tile::Water | Tile::HTrack | Tile::VTrack => None,
+				Tile::Block(_material) => {
+					let l = self.position + self.size.scale(LOW_CORNER);
+					let h = self.position + self.size.scale(HIGH_CORNER);
+					for a in [Z, Y, X] {
+						
+						if self.velocity[a] < 0.0 {
+							let t = prel(l[a], l[a] + self.velocity[a], tile_pos[a] as f64 + 1.0);
+							if t >= 0.0 && t <= max_t {
+								return Some((t, Vec3::unit(a)))
+							}
+						} else if self.velocity[a] > 0.0 {
+							let t = prel(h[a], h[a] + self.velocity[a], tile_pos[a] as f64);
+							if t >= 0.0 && t <= max_t {
+								return Some((t, -Vec3::<f64>::unit(a)))
+							}
+						}
+					}
+					None
+				}
+				Tile::Ramp(_material, direction, level) => {
+					todo!()
+				}
 			}
+		} else {
+			None
 		}
 	}
 }

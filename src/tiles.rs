@@ -1,4 +1,5 @@
-use crate::Vec3;
+use num_traits::Zero;
+use crate::*;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum RampDirection {
@@ -74,31 +75,45 @@ pub const CELL_SIZE_BITS: Vec3<u16> = Vec3(CELL_WIDTH_BITS, CELL_WIDTH_BITS, CEL
 pub const CELL_SIZE: Vec3<isize> = Vec3(CELL_WIDTH as isize, CELL_WIDTH as isize, CELL_HEIGHT as isize);
 pub const CELL_MASK: Vec3<isize> = Vec3(CELL_XY_MASK, CELL_XY_MASK, CELL_Z_MASK);
 
+type CellTiles = [[[Tile; CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT];
+
+impl std::ops::Index<Vec3<usize>> for CellTiles {
+	type Output = Tile;
+	fn index(&self, index: Vec3<usize>) -> &Self::Output {
+		&self[index.2][index.1][index.0]
+	}
+}
+
+impl std::ops::IndexMut<Vec3<usize>> for CellTiles {
+	fn index_mut(&mut self, index: Vec3<usize>) -> &mut Self::Output {
+		&mut self[index.2][index.1][index.0]
+	}
+}
+
 pub struct Cell {
-	pub tiles: Box<[[[Tile; CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT]>,
+	pub tiles: Box<CellTiles>,
 }
 
 impl Cell {
 	pub fn load(_location: Vec3<isize>) -> Self {
 		let mut tiles = {
-			let ptr = Box::into_raw(vec![[[Air; CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT].into_boxed_slice()) as *mut [[[Tile; CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT];
+			let ptr = Box::into_raw(vec![[[Air; CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT].into_boxed_slice()) as *mut CellTiles;
 			unsafe { Box::from_raw(ptr) }
 		};
 		
-		for y in 0..CELL_WIDTH {
-			for x in 0..CELL_WIDTH {
-				tiles[0][y][x] = Block(Stone);
-				tiles[1][y][x] = if (x + y) % 2 == 0 { Block(Mud) } else { Air };
-				tiles[2][y][x] = if (x + y) % 4 == 0 { Block(Dirt) } else { Air };
-				tiles[3][y][x] = if (x + y) % 8 == 0 { Block(Grass) } else { Air };
-				tiles[4][y][x] = Air;
-			}
+		for pos in Vec3Range::<usize, ZYX>::exclusive(Vec3::zero(), Vec3(CELL_WIDTH, CELL_WIDTH, 1)) {
+			tiles[pos] = Block(Stone);
+			tiles[pos + Vec3::<usize>::Z] = if (pos.x() + pos.y()) % 2 == 0 { Block(Mud) } else { Air };
+			tiles[pos + Vec3::<usize>::Z * 2] = if (pos.x() + pos.y()) % 4 == 0 { Block(Dirt) } else { Air };
+			tiles[pos + Vec3::<usize>::Z * 3] = if (pos.x() + pos.y()) % 8 == 0 { Block(Grass) } else { Air };
 		}
 		
-		tiles[9][0][0] = Block(Stone);
+		tiles[Vec3(0, 0, 9)] = Block(Stone);
 		
 		Self {
 			tiles,
 		}
 	}
 }
+
+

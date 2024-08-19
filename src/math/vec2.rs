@@ -1,52 +1,96 @@
-use std::{fmt::Debug, ops::{Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign}};
+use std::{fmt::Debug, ops::{Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign}};
 
-use num_traits::{AsPrimitive, Zero};
+use num_traits::{AsPrimitive, ConstOne, ConstZero, Float, Zero};
 
-use super::{Modulo, Sqrt, Vec3};
+use super::{Axis::{self, *}, Modulo, Vec3};
 
 #[derive(Copy, Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct Vec2<T>(pub T, pub T);
 
+impl<T> Vec2<T> where T: ConstZero + ConstOne {
+	pub const X: Self = Self(T::ONE, T::ZERO);
+	pub const Y: Self = Self(T::ZERO, T::ONE);
+}
+
 impl<T> Vec2<T> where {
-	pub fn x(self) -> T { self.0 }
-	pub fn y(self) -> T { self.1 }
+	pub const fn x(self) -> T where T: Copy { self.0 }
+	pub const fn y(self) -> T where T: Copy { self.1 }
 	
-	pub fn all(c: T) -> Self
+	pub const fn all(c: T) -> Self
 	where
 		T: Copy
 	{ Self(c, c) }
 	
-	pub fn dot<U>(&self, v: Vec2<U>) -> <<T as Mul<U>>::Output as Add>::Output
+	pub const fn unit(axis: Axis) -> Self
 	where
-		T: Copy + Mul<U>,
+		T: ConstZero + ConstOne
+	{
+		match axis {
+			X => Self::X,
+			Y => Self::Y,
+			Z => Self::ZERO,
+		}
+	}
+	
+	pub fn by_axis<F: Fn(Axis) -> T>(f: F) -> Self {
+		Self(f(X), f(Y))
+	}
+	
+	pub fn component(self, axis: Axis) -> Self
+	where
+		T: ConstZero
+	{
+		match axis {
+			X => Self(self.0, T::ZERO),
+			Y => Self(T::ZERO, self.1),
+			Z => Self(T::ZERO, T::ZERO),
+		}
+	}
+	
+	pub fn with_x(self, v: T) -> Self { Self(v, self.1) }
+	pub fn with_y(self, v: T) -> Self { Self(self.0, v) }
+	pub fn with(self, axis: Axis, v: T) -> Self {
+		match axis {
+			X => self.with_x(v),
+			Y => self.with_y(v),
+			Z => self,
+		}
+	}
+	
+	pub fn map<U, F>(self, f: F) -> Vec2<U> where F: Fn(T) -> U {
+		Vec2(f(self.0), f(self.1))
+	}
+	
+	pub fn dot<U>(self, v: Vec2<U>) -> <<T as Mul<U>>::Output as Add>::Output
+	where
+		T: Mul<U>,
 		<T as Mul<U>>::Output: Add
 	{ self.0 * v.0 + self.1 * v.1 }
 	
-	pub fn length_squared(&self) -> <<T as Mul>::Output as Add>::Output
+	pub fn length_squared(self) -> <<T as Mul>::Output as Add>::Output
 	where
 		T: Copy + Mul,
 		<T as Mul>::Output: Add
 	{ self.0*self.0 + self.1*self.1 }
 	
-	pub fn length_as<U>(&self) -> U
+	pub fn length_as<U>(self) -> U
 	where
 		T: Copy + Mul,
 		<T as Mul>::Output: Add,
-		U: Sqrt + From<<<T as Mul>::Output as Add>::Output>
-	{ U::from(self.length_squared()).sqrt() }
+		U: Float + From<<<T as Mul>::Output as Add>::Output>
+	{ <U as From<<<T as Mul>::Output as Add>::Output>>::from(self.length_squared()).sqrt() }
 	
-	pub fn normalize_as<U>(&self) -> Vec2<<T as Div<U>>::Output>
+	pub fn normalize_as<U>(self) -> Vec2<<T as Div<U>>::Output>
 	where
 		T: Copy + Mul + Mul<U, Output = T> + Div<U>,
 		<T as Mul>::Output: Add,
-		U: Copy + Sqrt + From<<<T as Mul>::Output as Add>::Output>
+		U: Float + From<<<T as Mul>::Output as Add>::Output>
 	{ let f = self.length_as::<U>(); Vec2(self.0/f, self.1/f) }
 	
-	pub fn cross<U>(&self, v: &Vec2<U>) -> <<T as Mul<U>>::Output as Sub>::Output
+	pub fn cross<U>(self, v: Vec2<U>) -> <<T as Mul<U>>::Output as Sub>::Output
 	where
-		T: Copy + Mul<U>,
-		<T as Mul<U>>::Output: Sub,
-		U: Copy
+		T: Mul<U>,
+		<T as Mul<U>>::Output: Sub
 	{ self.0 * v.1 - self.1 * v.0 }
 	
 	pub fn scale<U>(self, v: Vec2<U>) -> Vec2<<T as Mul<U>>::Output>
@@ -76,32 +120,43 @@ impl<T> Vec2<T> where {
 	{ Vec2(self.0.into(), self.1.into()) }
 }
 
-impl Vec2<f32> {
-	pub fn length(&self) -> f32 { self.length_as::<f32>() }
-	pub fn normalize(&self) -> Self { self.normalize_as::<f32>() }
-	pub fn normalize_or_zero(&self) -> Self { if self.is_zero() { Self::zero() } else { self.normalize() } }
-}
-
-impl Vec2<f64> {
-	pub fn length(&self) -> f64 { self.length_as::<f64>() }
-	pub fn normalize(&self) -> Self { self.normalize_as::<f64>() }
-	pub fn normalize_or_zero(&self) -> Self { if self.is_zero() { Self::zero() } else { self.normalize() } }
+impl<T> Vec2<T> where T: Float {
+	pub fn length(self) -> T { self.length_as::<T>() }
+	pub fn normalize(self) -> Self { self.normalize_as::<T>() }
+	pub fn normalize_or_zero(self) -> Self { if self.is_zero() { Self::zero() } else { self.normalize() } }
+	pub fn floor(self) -> Self { Self(self.0.floor(), self.1.floor()) }
+	pub fn ceil(self) -> Self { Self(self.0.ceil(), self.1.ceil()) }
+	
+	pub fn floor_to<U>(self) -> Vec2<U>
+	where
+		T: Copy + 'static + AsPrimitive<U>,
+		U: Copy + 'static
+	{ self.floor().as_type::<U>() }
+	
+	pub fn ceil_to<U>(self) -> Vec2<U>
+	where
+		T: Copy + 'static + AsPrimitive<U>,
+		U: Copy + 'static
+	{ self.ceil().as_type::<U>() }
 }
 
 impl<T> Zero for Vec2<T> where
-	T: Zero + PartialEq
+	T: Zero
 {
 	fn zero() -> Self { Self(T::zero(), T::zero()) }
-	fn is_zero(&self) -> bool { self.0 == T::zero() && self.1 == T::zero() }
+	fn is_zero(&self) -> bool { self.0.is_zero() && self.1.is_zero() }
 	fn set_zero(&mut self) { *self = Self::zero() }
 }
+
+impl<T> ConstZero for Vec2<T> where
+	T: ConstZero
+{ const ZERO: Self = Self(T::ZERO, T::ZERO); }
 
 
 impl<T, U> Modulo<U> for Vec2<T> where
 	T: Modulo<U>,
 	U: Copy
 { fn modulo(self, rhs: U) -> Self { Vec2(self.0.modulo(rhs), self.1.modulo(rhs)) } }
-
 
 
 
@@ -125,6 +180,27 @@ impl glium::uniforms::AsUniformValue for Vec2<u64> { fn as_uniform_value(&self) 
 
 
 // Operator overloading
+
+impl<T> Index<Axis> for Vec2<T> {
+	type Output = T;
+	fn index(&self, index: Axis) -> &Self::Output {
+		match index {
+			X => &self.0,
+			Y => &self.1,
+			Z => panic!("No Z axis for Vec2")
+		}
+	}
+}
+
+impl<T> IndexMut<Axis> for Vec2<T> {
+	fn index_mut(&mut self, index: Axis) -> &mut Self::Output {
+		match index {
+			X => &mut self.0,
+			Y => &mut self.1,
+			Z => panic!("No Z axis for Vec2")
+		}
+	}
+}
 
 impl<T, U> Add<Vec2<U>> for Vec2<T> where
 	T: Add<U>

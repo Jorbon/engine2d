@@ -2,13 +2,12 @@ use std::collections::HashMap;
 
 use glium::{framebuffer::MultiOutputFrameBuffer, glutin::{dpi::PhysicalSize, event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent}, event_loop::{ControlFlow, EventLoop}, window::{Icon, WindowBuilder}, ContextBuilder}, index::PrimitiveType, texture::{MipmapsOption, Texture2d, UncompressedUintFormat, UnsignedTexture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, Blend, BlendingFunction, Display, DrawParameters, IndexBuffer, LinearBlendingFactor, Surface, VertexBuffer};
 
-#[allow(dead_code)] mod vec;
+#[allow(dead_code)] mod math;
 #[allow(dead_code)] mod entity;
 #[allow(dead_code)] mod graphics;
 #[allow(dead_code)] mod tiles;
-#[allow(dead_code)] mod physics;
 
-use vec::*;
+use math::*;
 use entity::*;
 use graphics::*;
 use tiles::*;
@@ -163,7 +162,7 @@ fn main() {
 				let dt = now.duration_since(previous_frame_time).as_secs_f64();
 				previous_frame_time = now;
 				
-				println!("{dt}");
+				
 				
 				let cell_position = entities[0].position.scale_divide(CELL_SIZE.as_type::<f64>());
 				let cell_corner = Vec3(cell_position.x().round() as isize, cell_position.y().round() as isize, 0);
@@ -246,6 +245,8 @@ fn main() {
 							}
 						}
 					}
+					
+					
 					
 					let tile_data_texture = UnsignedTexture2d::with_format(&display, tile_data_buffer.clone(), UncompressedUintFormat::U16U16, MipmapsOption::NoMipmap).unwrap();
 					
