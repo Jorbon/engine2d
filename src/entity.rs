@@ -124,12 +124,8 @@ impl Entity {
 	// 	else if input.x() >  input.y().abs() { self.direction = FacingDirection::Right; }
 	// }
 	
-	pub fn get_force_direction(&self) -> Vec3<f64> {
-		Vec3(0.0, 0.0, -1.0)
-	}
-	
-	pub fn get_force_magnitude(&self) -> f64 {
-		9.8
+	pub fn get_force(&self) -> Vec3<f64> {
+		Vec3(0.0, 0.0, -9.8)
 	}
 	
 	pub fn physics_step(&mut self, cells: &HashMap<Vec3<isize>, Cell>, dt: f64) {
@@ -162,19 +158,35 @@ impl Entity {
 						}
 					}
 					Tile::Ramp(_material, direction, level) => {
-						todo!()
+						let direction = decode_ramp_direction(direction);
+						let l = self.position + self.size.scale(LOW_CORNER);
+						let h = self.position + self.size.scale(HIGH_CORNER);
+						
+						let near_corner = Vec3::by_axis(|a| if direction[a] >= 0 {l[a]} else {h[a]});
+						let ramp_s = (tile_pos.dot(direction.as_type::<isize>()) + level as isize) as f64;
+						let current_s = near_corner.dot(direction.as_type::<f64>());
+						if (current_s - ramp_s).abs() < SURFACE_MARGIN * direction.as_type::<f64>().length() {
+							self.position += direction.as_type::<f64>() * (ramp_s - current_s) / direction.as_type::<f64>().length_squared();
+							normals.push(direction.as_type::<f64>().normalize());
+						}
+						
 					}
 				}
 			}
 		}
 		
 		
-		self.velocity += self.get_force_direction() * self.get_force_magnitude() * dt;
+		self.velocity += self.get_force() * dt;
 		
 		self.velocity += self.movement_input * dt * 5.0;
 		
+		     if self.movement_input.y() < -self.movement_input.x().abs() { self.direction = FacingDirection::Up; }
+		else if self.movement_input.y() >  self.movement_input.x().abs() { self.direction = FacingDirection::Down; }
+		else if self.movement_input.x() < -self.movement_input.y().abs() { self.direction = FacingDirection::Left; }
+		else if self.movement_input.x() >  self.movement_input.y().abs() { self.direction = FacingDirection::Right; }
+		
 		if self.jump_input && normals.len() > 0 {
-			self.velocity -= self.get_force_direction() * 2.0;
+			self.velocity -= self.get_force().normalize_or_zero() * 2.0;
 		}
 		
 		for normal in normals {
@@ -223,7 +235,7 @@ impl Entity {
 				let mut next_tile_boundary = current_tile + reversed.map(|r| if r {0} else {1});
 				
 				loop {
-					let t_next = Vec3::by_axis(|a| prel(main_corner[a], main_corner[a] + self.velocity[a], next_tile_boundary[a] as f64));
+					let t_next = Vec3::by_axis(|a| prel(main_corner[a], main_corner[a] + self.velocity[a], next_tile_boundary[a] as f64)).map(|v| if v < 0.0 {f64::INFINITY} else {v});
 					let a = match (t_next.x() < t_next.y(), t_next.x() < t_next.z(), t_next.y() < t_next.z()) {
 						(true, true, _) => X,
 						(false, _, true) => Y,
@@ -252,6 +264,7 @@ impl Entity {
 				self.position += self.velocity * t;
 				self.velocity -= normal * self.velocity.dot(normal);
 				dt_remaining -= t;
+				// println!("{t}, {dt_remaining}, {normal:?}, {:?}", self.velocity);
 				continue
 			} else {
 				self.position += self.velocity * dt_remaining;
@@ -270,15 +283,14 @@ impl Entity {
 					let l = self.position + self.size.scale(LOW_CORNER);
 					let h = self.position + self.size.scale(HIGH_CORNER);
 					for a in [Z, Y, X] {
-						
 						if self.velocity[a] < 0.0 {
 							let t = prel(l[a], l[a] + self.velocity[a], tile_pos[a] as f64 + 1.0);
-							if t >= 0.0 && t <= max_t {
+							if t > 0.0 && t <= max_t {
 								return Some((t, Vec3::unit(a)))
 							}
 						} else if self.velocity[a] > 0.0 {
 							let t = prel(h[a], h[a] + self.velocity[a], tile_pos[a] as f64);
-							if t >= 0.0 && t <= max_t {
+							if t > 0.0 && t <= max_t {
 								return Some((t, -Vec3::<f64>::unit(a)))
 							}
 						}
@@ -286,7 +298,23 @@ impl Entity {
 					None
 				}
 				Tile::Ramp(_material, direction, level) => {
-					todo!()
+					let direction = decode_ramp_direction(direction);
+					let l = self.position + self.size.scale(LOW_CORNER);
+					let h = self.position + self.size.scale(HIGH_CORNER);
+					
+					if self.velocity.dot(direction.as_type::<f64>()) < -SURFACE_MARGIN {
+						let near_corner = Vec3::by_axis(|a| if direction[a] >= 0 {l[a]} else {h[a]});
+						let ramp_s = (tile_pos.dot(direction.as_type::<isize>()) + level as isize) as f64;
+						let current_s = near_corner.dot(direction.as_type::<f64>());
+						let next_s = (near_corner + self.velocity).dot(direction.as_type::<f64>());
+						let t = prel(current_s, next_s, ramp_s);
+						
+						if t >= 0.0 && t <= max_t {
+							return Some((t, direction.as_type::<f64>().normalize()))
+						}
+					}
+					
+					None
 				}
 			}
 		} else {

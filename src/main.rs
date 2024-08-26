@@ -6,11 +6,13 @@ use glium::{framebuffer::MultiOutputFrameBuffer, glutin::{dpi::PhysicalSize, eve
 #[allow(dead_code)] mod entity;
 #[allow(dead_code)] mod graphics;
 #[allow(dead_code)] mod tiles;
+#[allow(dead_code)] mod world;
 
 use math::*;
 use entity::*;
 use graphics::*;
 use tiles::*;
+use world::*;
 
 
 const PROJECTION_OFFSET: f32 = 0.5;
@@ -27,6 +29,9 @@ impl IsPressed for ElementState {
 		}
 	}
 }
+
+
+
 
 
 
@@ -66,11 +71,11 @@ fn main() {
 	
 	let tilemap_texture = load_texture(&display, "tilemap");
 	
-	let mut cells: HashMap<Vec3<isize>, Cell> = HashMap::new();
-	let mut entities = vec![];
+	let mut world = World::new();
 	
-	entities.push(Entity::new(
-		Vec3(0.5, 0.5, 10.0),
+	let player_pos = world.place_player(Vec3(0.5, 0.5, CELL_HEIGHT as f64));
+	world.entities.push(Entity::new(
+		player_pos,
 		Vec3(0.75, 0.75, 0.75),
 		SpriteSet::load(&display, "player")
 	));
@@ -123,16 +128,16 @@ fn main() {
 						VirtualKeyCode::LControl | VirtualKeyCode::RControl => key_ctrl = state.is_pressed(),
 						VirtualKeyCode::Space => key_space = state.is_pressed(),
 						VirtualKeyCode::Up => if state.is_pressed() {
-							entities[0].velocity.1 -= 30.0;
+							world.entities[0].velocity.1 -= 30.0;
 						}
 						VirtualKeyCode::Down => if state.is_pressed() {
-							entities[0].velocity.1 += 30.0;
+							world.entities[0].velocity.1 += 30.0;
 						}
 						VirtualKeyCode::Left => if state.is_pressed() {
-							entities[0].velocity.0 -= 30.0;
+							world.entities[0].velocity.0 -= 30.0;
 						}
 						VirtualKeyCode::Right => if state.is_pressed() {
-							entities[0].velocity.0 += 30.0;
+							world.entities[0].velocity.0 += 30.0;
 						}
 						VirtualKeyCode::Minus => if state.is_pressed() {
 							tile_size /= 1.1;
@@ -145,8 +150,8 @@ fn main() {
 								tilemap_program = load_shader_program(&display, "tilemap", "tilemap");
 								post_program = load_shader_program(&display, "default", "post_process");
 							} else {
-								entities[0].position = Vec3(0.5, 0.5, 10.0);
-								entities[0].velocity = Vec3(0.0, 0.0, 0.0);
+								world.entities[0].position = Vec3(0.5, 0.5, 10.0);
+								world.entities[0].velocity = Vec3(0.0, 0.0, 0.0);
 							}
 						}
 						VirtualKeyCode::Escape => if state.is_pressed() {
@@ -162,26 +167,19 @@ fn main() {
 				let dt = now.duration_since(previous_frame_time).as_secs_f64();
 				previous_frame_time = now;
 				
+				let cell_position = world.entities[0].position.scale_divide(CELL_SIZE.as_type::<f64>()) - Vec3(0.5, 0.5, 0.0);
 				
-				
-				let cell_position = entities[0].position.scale_divide(CELL_SIZE.as_type::<f64>());
-				let cell_corner = Vec3(cell_position.x().round() as isize, cell_position.y().round() as isize, 0);
-				
-				cells.retain(|pos, _|
-					(pos.x() == cell_corner.x() || pos.x() == cell_corner.x() - 1)
-					&& (pos.y() == cell_corner.y() || pos.y() == cell_corner.y() - 1)
-				);
-				
-				for offset in [
-					Vec3(-1, -1, 0),
-					Vec3( 0, -1, 0),
-					Vec3(-1,  0, 0),
-					Vec3( 0,  0, 0),
-				] {
-					let pos = cell_corner + offset;
-					if !cells.contains_key(&pos) {
-						cells.insert(pos, Cell::load(pos));
+				for (pos, cell) in &mut world.cells {
+					if (pos.x() as f64 - cell_position.x()).abs() > 1.25
+					|| (pos.y() as f64 - cell_position.y()).abs() > 1.25 {
+						cell.unload = true;
 					}
+				}
+				
+				world.unload_flagged();
+				
+				for pos in Vec3Range::<isize, ZYX>::inclusive((cell_position - Vec3(0.0, 0.0, 0.0)).floor_to().with_z(0), (cell_position + Vec3(1.0, 1.0, 0.0)).floor_to().with_z(0)) {
+					world.load(pos);
 				}
 				
 				
@@ -190,12 +188,12 @@ fn main() {
 				if key_s { dp.1 += 1.0; }
 				if key_a { dp.0 -= 1.0; }
 				if key_d { dp.0 += 1.0; }
-				entities[0].movement_input = dp.normalize_or_zero();
+				world.entities[0].movement_input = dp.normalize_or_zero();
 				
-				entities[0].jump_input = key_space;
+				world.entities[0].jump_input = key_space;
 				
-				for entity in &mut entities {
-					entity.physics_step(&cells, dt);
+				for entity in &mut world.entities {
+					entity.physics_step(&world.cells, dt);
 				}
 				
 				
@@ -203,7 +201,7 @@ fn main() {
 				let screen_width_in_tiles = 1.0 / tile_size;
 				
 				let render_size = Vec2(1.0, aspect_ratio) * screen_width_in_tiles + Vec2(0.0, 2.0 * PROJECTION_OFFSET);
-				let render_position = entities[0].position.xy().as_type::<f32>() - Vec2(0.0, entities[0].position.z() as f32 * PROJECTION_OFFSET) - render_size * 0.5 - Vec2(0.0, 1.0 * PROJECTION_OFFSET);
+				let render_position = world.entities[0].position.xy().as_type::<f32>() - Vec2(0.0, world.entities[0].position.z() as f32 * PROJECTION_OFFSET) - render_size * 0.5 - Vec2(0.0, 1.0 * PROJECTION_OFFSET);
 				
 				let x_size = render_size.x().ceil() as usize + 1;
 				let y_size = render_size.y().ceil() as usize + 1;
@@ -229,7 +227,7 @@ fn main() {
 						for cell_x in (x_start >> CELL_WIDTH_BITS)..=((x_end + 1) >> CELL_WIDTH_BITS) {
 							let cell_pos = Vec3(cell_x, cell_y, 0);
 							
-							if let Some(cell) = cells.get(&cell_pos) {
+							if let Some(cell) = world.cells.get(&cell_pos) {
 								let cell_start = cell_pos << CELL_SIZE_BITS;
 								let cell_end = cell_pos + Vec3(1, 1, 0) << CELL_SIZE_BITS;
 								let x_start_cell = isize::max(x_start, cell_start.x());
@@ -254,7 +252,7 @@ fn main() {
 							new("aspect_ratio", aspect_ratio)
 						.add("screen_width_in_tiles", screen_width_in_tiles)
 						.add("offset", render_position.modulo(1.0) + Vec2(0.0, 1.0 * PROJECTION_OFFSET))
-						.add("z", (z + 1) as f32 - entities[0].position.z() as f32)
+						.add("z", (z + 1) as f32 - world.entities[0].position.z() as f32)
 						.add("tile_data_texture", &tile_data_texture)
 						.add("tilemap_texture", Sampler(&tilemap_texture, SamplerBehavior {
 							wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
@@ -282,13 +280,13 @@ fn main() {
 				
 				let render_size_inverse = Vec2(1.0 / render_size.x(), 1.0 / render_size.y());
 				
-				entities.iter().rev().for_each(|entity| {
+				world.entities.iter().rev().for_each(|entity| {
 					target.draw(&rect_vertex_buffer, &rect_index_buffer, &world_texture_program, &UniformsStorage::
 							new("texture_position", entity.position.xy().as_type::<f32>() + Vec2(0.0, entity.position.z() as f32 * -PROJECTION_OFFSET) - entity.size.xy().as_type::<f32>() * 0.5)
 						.add("texture_size", entity.size.xy().as_type::<f32>())
 						.add("render_position", render_position)
 						.add("render_size_inverse", render_size_inverse)
-						.add("z", (entity.position.z() - entities[0].position.z()) as f32 + 0.1)
+						.add("z", (entity.position.z() - world.entities[0].position.z()) as f32 + 0.1)
 						.add("tex", Sampler(entity.current_sprite(), SamplerBehavior {
 							wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
 							minify_filter: MinifySamplerFilter::Linear,
