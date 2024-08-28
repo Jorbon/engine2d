@@ -81,8 +81,10 @@ impl World {
 		}
 		
 		tiles[Vec3(0, 0, 9)] = Block(Stone);
-		tiles[Vec3(1, 0, 7)] = Ramp(Brick, encode_ramp_direction(Vec3(1, 0, 1)), 1);
-		tiles[Vec3(2, 0, 7)] = Ramp(Brick, encode_ramp_direction(Vec3(-1, 0, 1)), 0);
+		tiles[Vec3(1, 0, 8)] = Ramp(Brick, encode_ramp_direction(Vec3( 1,  1, 2)), 2);
+		tiles[Vec3(2, 0, 8)] = Ramp(Brick, encode_ramp_direction(Vec3(-1,  1, 2)), 1);
+		tiles[Vec3(1, 1, 8)] = Ramp(Brick, encode_ramp_direction(Vec3( 1, -1, 2)), 1);
+		tiles[Vec3(2, 1, 8)] = Ramp(Brick, encode_ramp_direction(Vec3(-1, -1, 2)), 0);
 		
 		Cell {
 			tiles,

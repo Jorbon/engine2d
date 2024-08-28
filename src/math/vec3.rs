@@ -40,7 +40,7 @@ impl<T> Vec3<T> where {
 		}
 	}
 	
-	pub fn by_axis<F: Fn(Axis) -> T>(f: F) -> Self {
+	pub fn by_axis<F: FnMut(Axis) -> T>(mut f: F) -> Self {
 		Self(f(X), f(Y), f(Z))
 	}
 	
@@ -66,7 +66,7 @@ impl<T> Vec3<T> where {
 		}
 	}
 	
-	pub fn map<U, F>(self, f: F) -> Vec3<U> where F: Fn(T) -> U {
+	pub fn map<U, F>(self, mut f: F) -> Vec3<U> where F: FnMut(T) -> U {
 		Vec3(f(self.0), f(self.1), f(self.2))
 	}
 	

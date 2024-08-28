@@ -32,7 +32,7 @@ impl<T> Vec2<T> where {
 		}
 	}
 	
-	pub fn by_axis<F: Fn(Axis) -> T>(f: F) -> Self {
+	pub fn by_axis<F: FnMut(Axis) -> T>(mut f: F) -> Self {
 		Self(f(X), f(Y))
 	}
 	
@@ -57,7 +57,7 @@ impl<T> Vec2<T> where {
 		}
 	}
 	
-	pub fn map<U, F>(self, f: F) -> Vec2<U> where F: Fn(T) -> U {
+	pub fn map<U, F>(self, mut f: F) -> Vec2<U> where F: FnMut(T) -> U {
 		Vec2(f(self.0), f(self.1))
 	}
 	

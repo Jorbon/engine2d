@@ -140,34 +140,23 @@ impl Entity {
 				match cell.tiles[(tile_pos & CELL_MASK).as_type()] {
 					Tile::Air | Tile::Water | Tile::HTrack | Tile::VTrack => (),
 					Tile::Block(_material) => {
-						let h_inset = h - tile_pos.as_type::<f64>();
-						let l_inset = (tile_pos + Vec3(1, 1, 1)).as_type::<f64>() - l;
-						
-						for (a, b, c) in [(Z, X, Y), (Y, X, Z), (X, Y, Z)] {
-							if h_inset[b] > SURFACE_MARGIN && l_inset[b] > SURFACE_MARGIN
-							&& h_inset[c] > SURFACE_MARGIN && l_inset[c] > SURFACE_MARGIN {
-								if h_inset[a].abs() < SURFACE_MARGIN {
-									self.position[a] = tile_pos[a] as f64 - self.size[a] * HIGH_CORNER[a];
-									normals.push(-Vec3::<f64>::unit(a));
-								}
-								if l_inset[a].abs() < SURFACE_MARGIN {
-									self.position[a] = (tile_pos[a] + 1) as f64 - self.size[a] * LOW_CORNER[a];
-									normals.push(Vec3::unit(a));
-								}
-							}
-						}
+						self.block_touching(&mut normals, tile_pos, l, h);
 					}
 					Tile::Ramp(_material, direction, level) => {
 						let direction = decode_ramp_direction(direction);
-						let l = self.position + self.size.scale(LOW_CORNER);
-						let h = self.position + self.size.scale(HIGH_CORNER);
 						
 						let near_corner = Vec3::by_axis(|a| if direction[a] >= 0 {l[a]} else {h[a]});
+						
 						let ramp_s = (tile_pos.dot(direction.as_type::<isize>()) + level as isize) as f64;
-						let current_s = near_corner.dot(direction.as_type::<f64>());
-						if (current_s - ramp_s).abs() < SURFACE_MARGIN * direction.as_type::<f64>().length() {
-							self.position += direction.as_type::<f64>() * (ramp_s - current_s) / direction.as_type::<f64>().length_squared();
+						let near_corner_s = near_corner.dot(direction.as_type::<f64>());
+						if (near_corner_s - ramp_s).abs() < SURFACE_MARGIN * direction.as_type::<f64>().length()
+						&& near_corner.x() >= tile_pos.x() as f64 && near_corner.x() <= tile_pos.x() as f64 + 1.0
+						&& near_corner.y() >= tile_pos.y() as f64 && near_corner.y() <= tile_pos.y() as f64 + 1.0
+						&& near_corner.z() >= tile_pos.z() as f64 && near_corner.z() <= tile_pos.z() as f64 + 1.0 {
+							self.position += direction.as_type::<f64>() * (ramp_s - near_corner_s) / direction.as_type::<f64>().length_squared();
 							normals.push(direction.as_type::<f64>().normalize());
+						} else if near_corner_s < ramp_s {
+							self.block_touching(&mut normals, tile_pos, l, h);
 						}
 						
 					}
@@ -185,8 +174,13 @@ impl Entity {
 		else if self.movement_input.x() < -self.movement_input.y().abs() { self.direction = FacingDirection::Left; }
 		else if self.movement_input.x() >  self.movement_input.y().abs() { self.direction = FacingDirection::Right; }
 		
-		if self.jump_input && normals.len() > 0 {
-			self.velocity -= self.get_force().normalize_or_zero() * 2.0;
+		if self.jump_input {
+			for normal in &normals {
+				if normal.z() > 0.0 {
+					self.velocity -= self.get_force().normalize_or_zero() * 2.0;
+					break;
+				}
+			}
 		}
 		
 		for normal in normals {
@@ -280,22 +274,7 @@ impl Entity {
 			match cell.tiles[(tile_pos & CELL_MASK).as_type()] {
 				Tile::Air | Tile::Water | Tile::HTrack | Tile::VTrack => None,
 				Tile::Block(_material) => {
-					let l = self.position + self.size.scale(LOW_CORNER);
-					let h = self.position + self.size.scale(HIGH_CORNER);
-					for a in [Z, Y, X] {
-						if self.velocity[a] < 0.0 {
-							let t = prel(l[a], l[a] + self.velocity[a], tile_pos[a] as f64 + 1.0);
-							if t > 0.0 && t <= max_t {
-								return Some((t, Vec3::unit(a)))
-							}
-						} else if self.velocity[a] > 0.0 {
-							let t = prel(h[a], h[a] + self.velocity[a], tile_pos[a] as f64);
-							if t > 0.0 && t <= max_t {
-								return Some((t, -Vec3::<f64>::unit(a)))
-							}
-						}
-					}
-					None
+					self.block_collision(tile_pos, max_t)
 				}
 				Tile::Ramp(_material, direction, level) => {
 					let direction = decode_ramp_direction(direction);
@@ -303,14 +282,36 @@ impl Entity {
 					let h = self.position + self.size.scale(HIGH_CORNER);
 					
 					if self.velocity.dot(direction.as_type::<f64>()) < -SURFACE_MARGIN {
+						let (positive_sum, negative_sum) = {
+							let mut positive_sum = 0;
+							let mut negative_sum = 0;
+							direction.map(|v| if v > 0 { positive_sum += v; } else { negative_sum += v; });
+							(positive_sum, negative_sum)
+						};
+						
+						if level <= negative_sum { return None }
+						if level >= positive_sum { return self.block_collision(tile_pos, max_t) }
+						
+						
+						
 						let near_corner = Vec3::by_axis(|a| if direction[a] >= 0 {l[a]} else {h[a]});
 						let ramp_s = (tile_pos.dot(direction.as_type::<isize>()) + level as isize) as f64;
 						let current_s = near_corner.dot(direction.as_type::<f64>());
 						let next_s = (near_corner + self.velocity).dot(direction.as_type::<f64>());
 						let t = prel(current_s, next_s, ramp_s);
 						
-						if t >= 0.0 && t <= max_t {
-							return Some((t, direction.as_type::<f64>().normalize()))
+						let near_corner_pos = near_corner + self.velocity * t;
+						if t >= 0.0
+						&& near_corner_pos.x() >= tile_pos.x() as f64 && near_corner_pos.x() <= tile_pos.x() as f64 + 1.0
+						&& near_corner_pos.y() >= tile_pos.y() as f64 && near_corner_pos.y() <= tile_pos.y() as f64 + 1.0
+						&& near_corner_pos.z() >= tile_pos.z() as f64 && near_corner_pos.z() <= tile_pos.z() as f64 + 1.0 {
+							if t <= max_t {
+								return Some((t, direction.as_type::<f64>().normalize()))
+							} else {
+								return None
+							}
+						} else {
+							return self.block_collision(tile_pos, max_t)
 						}
 					}
 					
@@ -320,5 +321,43 @@ impl Entity {
 		} else {
 			None
 		}
+	}
+	
+	fn block_touching(&mut self, normals: &mut Vec<Vec3<f64>>, tile_pos: Vec3<isize>, l: Vec3<f64>, h: Vec3<f64>) {
+		let h_inset = h - tile_pos.as_type::<f64>();
+		let l_inset = tile_pos.as_type::<f64>() + Vec3(1.0, 1.0, 1.0) - l;
+		
+		for (a, b, c) in [(Z, X, Y), (Y, X, Z), (X, Y, Z)] {
+			if h_inset[b] > SURFACE_MARGIN && l_inset[b] > SURFACE_MARGIN
+			&& h_inset[c] > SURFACE_MARGIN && l_inset[c] > SURFACE_MARGIN {
+				if h_inset[a].abs() < SURFACE_MARGIN {
+					self.position[a] = tile_pos[a] as f64 - self.size[a] * HIGH_CORNER[a];
+					normals.push(-Vec3::<f64>::unit(a));
+				}
+				if l_inset[a].abs() < SURFACE_MARGIN {
+					self.position[a] = (tile_pos[a] + 1) as f64 - self.size[a] * LOW_CORNER[a];
+					normals.push(Vec3::unit(a));
+				}
+			}
+		}
+	}
+	
+	fn block_collision(&self, tile_pos: Vec3<isize>, max_t: f64) -> Option<(f64, Vec3<f64>)> {
+		let l = self.position + self.size.scale(LOW_CORNER);
+		let h = self.position + self.size.scale(HIGH_CORNER);
+		for a in [Z, Y, X] {
+			if self.velocity[a] < 0.0 {
+				let t = prel(l[a], l[a] + self.velocity[a], tile_pos[a] as f64 + 1.0);
+				if t > 0.0 && t <= max_t {
+					return Some((t, Vec3::unit(a)))
+				}
+			} else if self.velocity[a] > 0.0 {
+				let t = prel(h[a], h[a] + self.velocity[a], tile_pos[a] as f64);
+				if t > 0.0 && t <= max_t {
+					return Some((t, -Vec3::<f64>::unit(a)))
+				}
+			}
+		}
+		None
 	}
 }

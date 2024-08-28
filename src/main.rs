@@ -245,11 +245,10 @@ fn main() {
 					}
 					
 					
-					
 					let tile_data_texture = UnsignedTexture2d::with_format(&display, tile_data_buffer.clone(), UncompressedUintFormat::U16U16, MipmapsOption::NoMipmap).unwrap();
 					
 					target.draw(&rect_vertex_buffer, &rect_index_buffer, &tilemap_program, &UniformsStorage::
-							new("aspect_ratio", aspect_ratio)
+						 new("aspect_ratio", aspect_ratio)
 						.add("screen_width_in_tiles", screen_width_in_tiles)
 						.add("offset", render_position.modulo(1.0) + Vec2(0.0, 1.0 * PROJECTION_OFFSET))
 						.add("z", (z + 1) as f32 - world.entities[0].position.z() as f32)
