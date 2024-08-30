@@ -6,7 +6,6 @@ use crate::*;
 
 
 
-
 pub enum FacingDirection { Up, Down, Left, Right }
 
 pub struct Entity {
@@ -26,16 +25,9 @@ pub struct Entity {
 	pub jump_input: bool,
 }
 
-#[derive(PartialEq)]
-pub enum EntityStatus {
-	Grounded(Vec<Vec3<f64>>),
-	Falling,
-	Swimming,
-}
-
 pub enum SpriteSet {
 	Static(SrgbTexture2d),
-	Directional([SrgbTexture2d; 4])
+	Directional([SrgbTexture2d; 4]),
 }
 
 impl SpriteSet {

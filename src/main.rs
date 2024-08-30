@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use glium::{framebuffer::MultiOutputFrameBuffer, glutin::{dpi::PhysicalSize, event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent}, event_loop::{ControlFlow, EventLoop}, window::{Icon, WindowBuilder}, ContextBuilder}, index::PrimitiveType, texture::{MipmapsOption, Texture2d, UncompressedUintFormat, UnsignedTexture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, Blend, BlendingFunction, Display, DrawParameters, IndexBuffer, LinearBlendingFactor, Surface, VertexBuffer};
+use glium::{framebuffer::MultiOutputFrameBuffer, glutin::{dpi::PhysicalSize, event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent}, event_loop::{ControlFlow, EventLoop}, window::{Icon, WindowBuilder}, ContextBuilder}, index::PrimitiveType, texture::{DepthTexture2d, MipmapsOption, Texture2d, UncompressedUintFormat, UnsignedTexture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, Blend, BlendingFunction, Display, DrawParameters, IndexBuffer, LinearBlendingFactor, Surface, VertexBuffer};
 
 #[allow(dead_code)] mod math;
 #[allow(dead_code)] mod entity;
@@ -68,6 +68,7 @@ fn main() {
 	
 	let mut screen_texture = Texture2d::empty(&display, window_width, window_height).unwrap();
 	let mut data_texture = Texture2d::empty(&display, window_width, window_height).unwrap();
+	let mut depth_texture = DepthTexture2d::empty(&display, window_width, window_height).unwrap();
 	
 	let tilemap_texture = load_texture(&display, "tilemap");
 	
@@ -85,7 +86,7 @@ fn main() {
 	let mut key_s = false;
 	let mut key_d = false;
 	
-	let mut _key_shift = false;
+	let mut key_shift = false;
 	let mut key_ctrl = false;
 	let mut key_space = false;
 	
@@ -105,6 +106,7 @@ fn main() {
 					aspect_ratio = physical_size.height as f32 / physical_size.width as f32;
 					screen_texture = Texture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
 					data_texture = Texture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
+					depth_texture = DepthTexture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
 				}
 				WindowEvent::CursorMoved { position: _, device_id: _, .. } => {
 					
@@ -124,7 +126,7 @@ fn main() {
 						VirtualKeyCode::S => key_s = state.is_pressed(),
 						VirtualKeyCode::A => key_a = state.is_pressed(),
 						VirtualKeyCode::D => key_d = state.is_pressed(),
-						VirtualKeyCode::LShift | VirtualKeyCode::RShift => _key_shift = state.is_pressed(),
+						VirtualKeyCode::LShift | VirtualKeyCode::RShift => key_shift = state.is_pressed(),
 						VirtualKeyCode::LControl | VirtualKeyCode::RControl => key_ctrl = state.is_pressed(),
 						VirtualKeyCode::Space => key_space = state.is_pressed(),
 						VirtualKeyCode::Up => if state.is_pressed() {
@@ -150,7 +152,13 @@ fn main() {
 								tilemap_program = load_shader_program(&display, "tilemap", "tilemap");
 								post_program = load_shader_program(&display, "default", "post_process");
 							} else {
-								world.entities[0].position = Vec3(0.5, 0.5, 10.0);
+								if key_shift {
+									let mut w = World::new();
+									w.entities.append(&mut world.entities.drain(0..=0).collect());
+									world = w;
+								}
+								
+								world.entities[0].position = world.place_player(Vec3(0.5, 0.5, CELL_HEIGHT as f64));
 								world.entities[0].velocity = Vec3(0.0, 0.0, 0.0);
 							}
 						}
@@ -208,10 +216,10 @@ fn main() {
 				let mut tile_data_buffer = vec![vec![(0, 0); x_size]; y_size];
 				
 				
-				let mut target = MultiOutputFrameBuffer::new(&display, [
+				let mut target = MultiOutputFrameBuffer::with_depth_buffer(&display, [
 					("color", &screen_texture),
 					("data", &data_texture),
-				]).unwrap();
+				], &depth_texture).unwrap();
 				target.clear_color(0.0, 0.0, 0.0, 0.0);
 				
 				
@@ -281,7 +289,7 @@ fn main() {
 				
 				world.entities.iter().rev().for_each(|entity| {
 					target.draw(&rect_vertex_buffer, &rect_index_buffer, &world_texture_program, &UniformsStorage::
-							new("texture_position", entity.position.xy().as_type::<f32>() + Vec2(0.0, entity.position.z() as f32 * -PROJECTION_OFFSET) - entity.size.xy().as_type::<f32>() * 0.5)
+						 new("texture_position", entity.position.xy().as_type::<f32>() + Vec2(0.0, entity.position.z() as f32 * -PROJECTION_OFFSET) - entity.size.xy().as_type::<f32>() * 0.5)
 						.add("texture_size", entity.size.xy().as_type::<f32>())
 						.add("render_position", render_position)
 						.add("render_size_inverse", render_size_inverse)
@@ -307,9 +315,21 @@ fn main() {
 				});
 				
 				
+				// let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+				
+				// let mut noise_data = vec![vec![0.0; window_width as usize]; window_height as usize];
+				// for y in 0..window_height as usize {
+				// 	for x in 0..window_width as usize {
+				// 		noise_data[window_height as usize - (y + 1)][x] = perlin_noise(Vec2(x as f64 / 100.0, y as f64 / 100.0), seed) as f32 + 0.5;
+				// 	}
+				// }
+				
+				// screen_texture = Texture2d::with_format(&display, noise_data, glium::texture::UncompressedFloatFormat::F32, MipmapsOption::NoMipmap).unwrap();
+				
+				
 				let mut display_target = display.draw();
 				display_target.draw(&rect_vertex_buffer, &rect_index_buffer, &post_program, &UniformsStorage::
-						new("aspect_ratio", aspect_ratio)
+					 new("aspect_ratio", aspect_ratio)
 					.add("screen_texture", Sampler(&screen_texture, SamplerBehavior {
 						wrap_function: (SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp),
 						minify_filter: MinifySamplerFilter::Nearest,
