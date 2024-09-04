@@ -32,32 +32,21 @@ pub enum Tile {
 	Water,
 	Block(Material),
 	Ramp(Material, u16, i8),
-	HTrack,
-	VTrack,
 }
 
 pub use Material::*;
 pub use Tile::*;
 
-impl Tile {
-	pub fn get_uv(&self) -> (u16, u16) {
+impl Material {
+	pub fn get_uv(&self) -> Vec2<u16> {
 		match self {
-			Air    => (0, 0),
-			Water  => (5, 0),
-			Block(material) => match material {
-				Grass  => (1, 0),
-				Mud    => (2, 0),
-				Dirt   => (3, 0),
-				Stone  => (4, 0),
-				Wood   => (0, 1),
-				Brick  => (1, 1),
-				Tiles   => (2, 1),
-			}
-			Ramp(_material, _direction, _level) => {
-				(10, 10)
-			}
-			HTrack => (0, 2),
-			VTrack => (1, 2),
+			Grass => Vec2(1, 0),
+			Mud   => Vec2(2, 0),
+			Dirt  => Vec2(3, 0),
+			Stone => Vec2(4, 0),
+			Wood  => Vec2(0, 1),
+			Brick => Vec2(1, 1),
+			Tiles => Vec2(2, 1),
 		}
 	}
 }

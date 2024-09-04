@@ -1,13 +1,18 @@
 #version 150
 
-in vec2 position;
-out vec2 world_position;
+in vec3 position;
+in vec2 uv;
+out vec2 uv_;
 
-uniform float aspect_ratio;
-uniform vec2 offset;
-uniform float screen_width_in_tiles;
+uniform vec3 cell_position;
+uniform vec3 tile_size;
+
+const float PROJECTION_OFFSET = 0.5;
 
 void main() {
-	world_position = position * screen_width_in_tiles * vec2(1, aspect_ratio) + offset;
-	gl_Position = vec4((position * 2.0 - 1.0) * vec2(1, -1), 0.0, 1.0);
+	uv_ = uv;
+	vec3 pos = position + cell_position;
+	pos.y -= pos.z * PROJECTION_OFFSET;
+	pos.y *= -1;
+	gl_Position = vec4(pos * tile_size * 2, 1);
 }

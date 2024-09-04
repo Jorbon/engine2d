@@ -1,5 +1,6 @@
 use std::{fmt::Debug, ops::{Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign}};
 
+use glium::{uniforms::{AsUniformValue, UniformValue}, vertex::{Attribute, AttributeType}, VertexFormat};
 use num_traits::{AsPrimitive, ConstOne, ConstZero, Float, Zero};
 
 use super::{Axis::{self, *},Modulo, Vec2};
@@ -65,6 +66,17 @@ impl<T> Vec3<T> where {
 			Z => self.with_z(v),
 		}
 	}
+	
+	pub fn add_x<U>(self, v: U) -> Self where T: Add<U, Output = T> { Self(self.0 + v, self.1, self.2) }
+	pub fn add_y<U>(self, v: U) -> Self where T: Add<U, Output = T> { Self(self.0, self.1 + v, self.2) }
+	pub fn add_z<U>(self, v: U) -> Self where T: Add<U, Output = T> { Self(self.0, self.1, self.2 + v) }
+	// pub fn add<U>(self, axis: Axis, v: U) -> Self where T: Add<U, Output = T> {
+	// 	match axis {
+	// 		X => self.add_x(v),
+	// 		Y => self.add_y(v),
+	// 		Z => self.add_z(v),
+	// 	}
+	// }
 	
 	pub fn map<U, F>(self, mut f: F) -> Vec3<U> where F: FnMut(T) -> U {
 		Vec3(f(self.0), f(self.1), f(self.2))
@@ -171,22 +183,29 @@ impl<T, U> Modulo<U> for Vec3<T> where
 
 
 
-impl<T> glium::Vertex for Vec3<T> where
-	T: Copy,
-	(T, T, T): glium::vertex::Attribute
+unsafe impl<T> Attribute for Vec3<T> where
+	(T, T, T): Attribute
 {
-	fn build_bindings() -> glium::VertexFormat {
-		use glium::vertex::Attribute;
-		std::borrow::Cow::Owned(vec![(std::borrow::Cow::Borrowed("position"), 0, -1, <(T, T, T)>::get_type(), false)])
+	fn get_type() -> AttributeType {
+		<(T, T, T) as Attribute>::get_type()
 	}
 }
 
-impl glium::uniforms::AsUniformValue for Vec3<f32> { fn as_uniform_value(&self) -> glium::uniforms::UniformValue<'_> { glium::uniforms::UniformValue::Vec3([self.0, self.1, self.2]) } }
-impl glium::uniforms::AsUniformValue for Vec3<f64> { fn as_uniform_value(&self) -> glium::uniforms::UniformValue<'_> { glium::uniforms::UniformValue::DoubleVec3([self.0, self.1, self.2]) } }
-impl glium::uniforms::AsUniformValue for Vec3<i32> { fn as_uniform_value(&self) -> glium::uniforms::UniformValue<'_> { glium::uniforms::UniformValue::IntVec3([self.0, self.1, self.2]) } }
-impl glium::uniforms::AsUniformValue for Vec3<i64> { fn as_uniform_value(&self) -> glium::uniforms::UniformValue<'_> { glium::uniforms::UniformValue::Int64Vec3([self.0, self.1, self.2]) } }
-impl glium::uniforms::AsUniformValue for Vec3<u32> { fn as_uniform_value(&self) -> glium::uniforms::UniformValue<'_> { glium::uniforms::UniformValue::UnsignedIntVec3([self.0, self.1, self.2]) } }
-impl glium::uniforms::AsUniformValue for Vec3<u64> { fn as_uniform_value(&self) -> glium::uniforms::UniformValue<'_> { glium::uniforms::UniformValue::UnsignedInt64Vec3([self.0, self.1, self.2]) } }
+impl<T> glium::Vertex for Vec3<T> where
+	Self: Attribute,
+	T: Copy
+{
+	fn build_bindings() -> VertexFormat {
+		std::borrow::Cow::Owned(vec![(std::borrow::Cow::Borrowed("position"), 0, -1, <Self as Attribute>::get_type(), false)])
+	}
+}
+
+impl AsUniformValue for Vec3<f32> { fn as_uniform_value(&self) -> UniformValue<'_> { UniformValue::Vec3([self.0, self.1, self.2]) } }
+impl AsUniformValue for Vec3<f64> { fn as_uniform_value(&self) -> UniformValue<'_> { UniformValue::DoubleVec3([self.0, self.1, self.2]) } }
+impl AsUniformValue for Vec3<i32> { fn as_uniform_value(&self) -> UniformValue<'_> { UniformValue::IntVec3([self.0, self.1, self.2]) } }
+impl AsUniformValue for Vec3<i64> { fn as_uniform_value(&self) -> UniformValue<'_> { UniformValue::Int64Vec3([self.0, self.1, self.2]) } }
+impl AsUniformValue for Vec3<u32> { fn as_uniform_value(&self) -> UniformValue<'_> { UniformValue::UnsignedIntVec3([self.0, self.1, self.2]) } }
+impl AsUniformValue for Vec3<u64> { fn as_uniform_value(&self) -> UniformValue<'_> { UniformValue::UnsignedInt64Vec3([self.0, self.1, self.2]) } }
 
 
 

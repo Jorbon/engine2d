@@ -1,17 +1,20 @@
 #version 150
 
 in vec2 position;
-out vec2 screen_position;
 out vec2 uv;
 
-uniform vec2 texture_position;
 uniform vec2 texture_size;
-uniform vec2 render_position;
-uniform vec2 render_size_inverse;
+uniform vec3 texture_position;
+uniform vec3 render_position;
+uniform vec3 tile_size;
+
+const float PROJECTION_OFFSET = 0.5;
 
 void main() {
 	uv = position;
-	screen_position = (position * texture_size + (texture_position - render_position)) * render_size_inverse;
-	screen_position.y = 1.0 - screen_position.y;
-	gl_Position = vec4((screen_position * 2.0 - 1.0), 0.0, 1.0);
+	vec3 pos = texture_position - render_position;
+	pos.y -= pos.z * PROJECTION_OFFSET;
+	pos.xy += position * texture_size;
+	pos.y *= -1;
+	gl_Position = vec4(pos * tile_size * 2, 1);
 }

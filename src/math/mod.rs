@@ -71,7 +71,7 @@ impl<T> Iterator for DirectionalRange<T> where
 }
 
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Axis { X, Y, Z }
 pub use Axis::*;
 

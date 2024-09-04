@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use glium::{framebuffer::MultiOutputFrameBuffer, glutin::{dpi::PhysicalSize, event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent}, event_loop::{ControlFlow, EventLoop}, window::{Icon, WindowBuilder}, ContextBuilder}, index::PrimitiveType, texture::{DepthTexture2d, MipmapsOption, Texture2d, UncompressedUintFormat, UnsignedTexture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, Blend, BlendingFunction, Display, DrawParameters, IndexBuffer, LinearBlendingFactor, Surface, VertexBuffer};
+use glium::{draw_parameters::DepthClamp, framebuffer::MultiOutputFrameBuffer, glutin::{dpi::PhysicalSize, event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent}, event_loop::{ControlFlow, EventLoop}, window::{Icon, WindowBuilder}, ContextBuilder}, index::PrimitiveType, texture::{DepthTexture2d, Texture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, BackfaceCullingMode, Blend, BlendingFunction, Depth, DepthTest, Display, DrawParameters, IndexBuffer, LinearBlendingFactor, Surface, VertexBuffer};
 
 #[allow(dead_code)] mod math;
 #[allow(dead_code)] mod entity;
@@ -15,7 +15,7 @@ use tiles::*;
 use world::*;
 
 
-const PROJECTION_OFFSET: f32 = 0.5;
+const _PROJECTION_OFFSET: f32 = 0.5;
 
 
 trait IsPressed {
@@ -62,9 +62,10 @@ fn main() {
 	
 	
 	let PhysicalSize { width: window_width, height: window_height } = display.gl_window().window().inner_size();
-	let mut aspect_ratio = window_height as f32 / window_width as f32;
+	let mut aspect_ratio = window_width as f32 / window_height as f32;
 	
 	let mut tile_size = 1.0/40.0;
+	let tile_depth = 1.0/32.0;
 	
 	let mut screen_texture = Texture2d::empty(&display, window_width, window_height).unwrap();
 	let mut data_texture = Texture2d::empty(&display, window_width, window_height).unwrap();
@@ -103,7 +104,7 @@ fn main() {
 					*control_flow = ControlFlow::Exit;
 				}
 				WindowEvent::Resized(physical_size) => {
-					aspect_ratio = physical_size.height as f32 / physical_size.width as f32;
+					aspect_ratio = physical_size.width as f32 / physical_size.height as f32;
 					screen_texture = Texture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
 					data_texture = Texture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
 					depth_texture = DepthTexture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
@@ -187,7 +188,7 @@ fn main() {
 				world.unload_flagged();
 				
 				for pos in Vec3Range::<isize, ZYX>::inclusive((cell_position - Vec3(0.0, 0.0, 0.0)).floor_to().with_z(0), (cell_position + Vec3(1.0, 1.0, 0.0)).floor_to().with_z(0)) {
-					world.load(pos);
+					world.get_or_load(pos);
 				}
 				
 				
@@ -206,94 +207,60 @@ fn main() {
 				
 				
 				
-				let screen_width_in_tiles = 1.0 / tile_size;
-				
-				let render_size = Vec2(1.0, aspect_ratio) * screen_width_in_tiles + Vec2(0.0, 2.0 * PROJECTION_OFFSET);
-				let render_position = world.entities[0].position.xy().as_type::<f32>() - Vec2(0.0, world.entities[0].position.z() as f32 * PROJECTION_OFFSET) - render_size * 0.5 - Vec2(0.0, 1.0 * PROJECTION_OFFSET);
-				
-				let x_size = render_size.x().ceil() as usize + 1;
-				let y_size = render_size.y().ceil() as usize + 1;
-				let mut tile_data_buffer = vec![vec![(0, 0); x_size]; y_size];
-				
 				
 				let mut target = MultiOutputFrameBuffer::with_depth_buffer(&display, [
 					("color", &screen_texture),
 					("data", &data_texture),
 				], &depth_texture).unwrap();
-				target.clear_color(0.0, 0.0, 0.0, 0.0);
+				target.clear_color_and_depth((0.0, 0.0, 0.0, 0.0), 0.0);
 				
 				
-				for z in 0..CELL_HEIGHT {
-					let render_position = render_position + Vec2(0.0, PROJECTION_OFFSET * (z + 1) as f32);
-					
-					let x_start = render_position.x().floor() as isize;
-					let y_start = render_position.y().floor() as isize;
-					let x_end = x_start + x_size as isize;
-					let y_end = y_start + y_size as isize;
-					
-					for cell_y in (y_start >> CELL_WIDTH_BITS)..=((y_end + 1) >> CELL_WIDTH_BITS) {
-						for cell_x in (x_start >> CELL_WIDTH_BITS)..=((x_end + 1) >> CELL_WIDTH_BITS) {
-							let cell_pos = Vec3(cell_x, cell_y, 0);
-							
-							if let Some(cell) = world.cells.get(&cell_pos) {
-								let cell_start = cell_pos << CELL_SIZE_BITS;
-								let cell_end = cell_pos + Vec3(1, 1, 0) << CELL_SIZE_BITS;
-								let x_start_cell = isize::max(x_start, cell_start.x());
-								let y_start_cell = isize::max(y_start, cell_start.y());
-								let x_end_cell = isize::min(x_end, cell_end.x());
-								let y_end_cell = isize::min(y_end, cell_end.y());
-								
-								for y in y_start_cell..y_end_cell {
-									for x in x_start_cell..x_end_cell {
-										tile_data_buffer[(y - y_start) as usize][(x - x_start) as usize] = cell.tiles[z][(y & CELL_XY_MASK) as usize][(x & CELL_XY_MASK) as usize].get_uv();
-									}
-								}
-							}
-						}
+				world.update_buffers(&display);
+				
+				for (location, cell) in &world.cells {
+					if let Some((vertex_buffer, index_buffer)) = &cell.buffers {
+						target.draw(vertex_buffer, index_buffer, &tilemap_program, &UniformsStorage::
+							 new("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))
+							.add("cell_position", (*location << CELL_SIZE_BITS).as_type::<f32>() - world.entities[0].position.as_type::<f32>())
+							.add("tilemap_texture", Sampler(&tilemap_texture, SamplerBehavior {
+								wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
+								minify_filter: MinifySamplerFilter::Linear,
+								magnify_filter: MagnifySamplerFilter::Nearest,
+								depth_texture_comparison: None,
+								max_anisotropy: 1,
+							}))
+						, &DrawParameters {
+							backface_culling: BackfaceCullingMode::CullClockwise,
+							blend: Blend {
+								color: BlendingFunction::Addition {
+									source: LinearBlendingFactor::SourceAlpha,
+									destination: LinearBlendingFactor::OneMinusSourceAlpha,
+								},
+								alpha: BlendingFunction::Addition {
+									source: LinearBlendingFactor::One,
+									destination: LinearBlendingFactor::OneMinusSourceAlpha,
+								},
+								constant_value: (0.0, 0.0, 0.0, 0.0)
+							},
+							depth: Depth {
+								test: DepthTest::IfMoreOrEqual,
+								write: true,
+								range: (0.0, 1.0),
+								clamp: DepthClamp::NoClamp,
+							},
+							.. Default::default()
+						}).unwrap();
 					}
-					
-					
-					let tile_data_texture = UnsignedTexture2d::with_format(&display, tile_data_buffer.clone(), UncompressedUintFormat::U16U16, MipmapsOption::NoMipmap).unwrap();
-					
-					target.draw(&rect_vertex_buffer, &rect_index_buffer, &tilemap_program, &UniformsStorage::
-						 new("aspect_ratio", aspect_ratio)
-						.add("screen_width_in_tiles", screen_width_in_tiles)
-						.add("offset", render_position.modulo(1.0) + Vec2(0.0, 1.0 * PROJECTION_OFFSET))
-						.add("z", (z + 1) as f32 - world.entities[0].position.z() as f32)
-						.add("tile_data_texture", &tile_data_texture)
-						.add("tilemap_texture", Sampler(&tilemap_texture, SamplerBehavior {
-							wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
-							minify_filter: MinifySamplerFilter::Linear,
-							magnify_filter: MagnifySamplerFilter::Nearest,
-							depth_texture_comparison: None,
-							max_anisotropy: 1,
-						}))
-					, &DrawParameters {
-						blend: Blend {
-							color: BlendingFunction::Addition {
-								source: LinearBlendingFactor::SourceAlpha,
-								destination: LinearBlendingFactor::OneMinusSourceAlpha,
-							},
-							alpha: BlendingFunction::Addition {
-								source: LinearBlendingFactor::One,
-								destination: LinearBlendingFactor::OneMinusSourceAlpha,
-							},
-							constant_value: (0.0, 0.0, 0.0, 0.0)
-						},
-						.. Default::default()
-					}).unwrap();
 				}
 				
 				
-				let render_size_inverse = Vec2(1.0 / render_size.x(), 1.0 / render_size.y());
 				
 				world.entities.iter().rev().for_each(|entity| {
 					target.draw(&rect_vertex_buffer, &rect_index_buffer, &world_texture_program, &UniformsStorage::
-						 new("texture_position", entity.position.xy().as_type::<f32>() + Vec2(0.0, entity.position.z() as f32 * -PROJECTION_OFFSET) - entity.size.xy().as_type::<f32>() * 0.5)
+						 new("texture_position", entity.position.as_type::<f32>() + entity.size.scale(LOW_CORNER).as_type::<f32>().add_z(0.01))
 						.add("texture_size", entity.size.xy().as_type::<f32>())
-						.add("render_position", render_position)
-						.add("render_size_inverse", render_size_inverse)
-						.add("z", (entity.position.z() - world.entities[0].position.z()) as f32 + 0.1)
+						.add("render_position", world.entities[0].position.as_type::<f32>())
+						.add("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))
 						.add("tex", Sampler(entity.current_sprite(), SamplerBehavior {
 							wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
 							minify_filter: MinifySamplerFilter::Linear,
@@ -301,15 +268,21 @@ fn main() {
 							depth_texture_comparison: None,
 							max_anisotropy: 1,
 						}))
-						.add("data_texture", Sampler(&data_texture, SamplerBehavior {
-							wrap_function: (SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp),
-							minify_filter: MinifySamplerFilter::Nearest,
-							magnify_filter: MagnifySamplerFilter::Nearest,
-							depth_texture_comparison: None,
-							max_anisotropy: 1
-						}))
+						// .add("data_texture", Sampler(&data_texture, SamplerBehavior {
+						// 	wrap_function: (SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp),
+						// 	minify_filter: MinifySamplerFilter::Nearest,
+						// 	magnify_filter: MagnifySamplerFilter::Nearest,
+						// 	depth_texture_comparison: None,
+						// 	max_anisotropy: 1
+						// }))
 					, &DrawParameters {
 						blend: Blend::alpha_blending(),
+						depth: Depth {
+							test: DepthTest::IfMoreOrEqual,
+							write: true,
+							range: (0.0, 1.0),
+							clamp: DepthClamp::NoClamp,
+						},
 						..Default::default()
 					}).unwrap();
 				});
@@ -338,6 +311,13 @@ fn main() {
 						max_anisotropy: 1
 					}))
 					.add("data_texture", Sampler(&data_texture, SamplerBehavior {
+						wrap_function: (SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp),
+						minify_filter: MinifySamplerFilter::Nearest,
+						magnify_filter: MagnifySamplerFilter::Nearest,
+						depth_texture_comparison: None,
+						max_anisotropy: 1
+					}))
+					.add("depth_texture", Sampler(&depth_texture, SamplerBehavior {
 						wrap_function: (SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp),
 						minify_filter: MinifySamplerFilter::Nearest,
 						magnify_filter: MagnifySamplerFilter::Nearest,

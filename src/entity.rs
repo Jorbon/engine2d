@@ -48,8 +48,8 @@ impl SpriteSet {
 
 
 
-const LOW_CORNER: Vec3<f64> = Vec3(-0.5, -0.5, 0.0);
-const HIGH_CORNER: Vec3<f64> = Vec3(0.5, 0.5, 1.0);
+pub const LOW_CORNER: Vec3<f64> = Vec3(-0.5, -0.5, 0.0);
+pub const HIGH_CORNER: Vec3<f64> = Vec3(0.5, 0.5, 1.0);
 
 const SURFACE_MARGIN: f64 = 1e-4;
 
@@ -130,11 +130,11 @@ impl Entity {
 			let cell_pos = tile_pos >> CELL_SIZE_BITS;
 			if let Some(cell) = cells.get(&cell_pos) {
 				match cell.tiles[(tile_pos & CELL_MASK).as_type()] {
-					Tile::Air | Tile::Water | Tile::HTrack | Tile::VTrack => (),
-					Tile::Block(_material) => {
+					Air | Water => (),
+					Block(_material) => {
 						self.block_touching(&mut normals, tile_pos, l, h);
 					}
-					Tile::Ramp(_material, direction, level) => {
+					Ramp(_material, direction, level) => {
 						let direction = decode_ramp_direction(direction);
 						
 						let near_corner = Vec3::by_axis(|a| if direction[a] >= 0 {l[a]} else {h[a]});
@@ -264,11 +264,11 @@ impl Entity {
 		let cell_pos = tile_pos >> CELL_SIZE_BITS;
 		if let Some(cell) = cells.get(&cell_pos) {
 			match cell.tiles[(tile_pos & CELL_MASK).as_type()] {
-				Tile::Air | Tile::Water | Tile::HTrack | Tile::VTrack => None,
-				Tile::Block(_material) => {
+				Air | Water => None,
+				Block(_material) => {
 					self.block_collision(tile_pos, max_t)
 				}
-				Tile::Ramp(_material, direction, level) => {
+				Ramp(_material, direction, level) => {
 					let direction = decode_ramp_direction(direction);
 					let l = self.position + self.size.scale(LOW_CORNER);
 					let h = self.position + self.size.scale(HIGH_CORNER);

@@ -6,12 +6,17 @@ out vec4 color;
 uniform float aspect_ratio;
 uniform sampler2D screen_texture;
 uniform sampler2D data_texture;
+uniform sampler2D depth_texture;
 
-const vec3 kernel[8] = vec3[](
+const vec3 kernel[12] = vec3[](
 	vec3(-1.0,  0.0, 1.0),
 	vec3( 1.0,  0.0, 1.0),
 	vec3( 0.0, -1.0, 1.0),
 	vec3( 0.0,  1.0, 1.0),
+	vec3(-1.0, -1.0, 0.5),
+	vec3( 1.0, -1.0, 0.5),
+	vec3(-1.0,  1.0, 0.5),
+	vec3( 1.0,  1.0, 0.5),
 	vec3(-2.0,  0.0, 0.5),
 	vec3( 2.0,  0.0, 0.5),
 	vec3( 0.0, -2.0, 0.5),

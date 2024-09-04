@@ -1,5 +1,6 @@
 use glium::{program::ProgramCreationInput, texture::{RawImage2d, SrgbTexture2d}, Display, Frame, Surface, Texture2d};
 
+use crate::*;
 
 
 pub fn load_texture(display: &Display, path: &str) -> SrgbTexture2d {
@@ -33,3 +34,10 @@ pub fn load_shader_program(display: &Display, vert_shader: &str, frag_shader: &s
         uses_point_size: false,
     }).unwrap()
 }
+
+#[derive(Copy, Clone)]
+pub struct ModelVertex {
+    pub position: Vec3<f32>,
+    pub uv: Vec2<f32>,
+}
+glium::implement_vertex!(ModelVertex, position, uv);
