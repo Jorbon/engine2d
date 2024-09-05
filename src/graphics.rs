@@ -38,6 +38,10 @@ pub fn load_shader_program(display: &Display, vert_shader: &str, frag_shader: &s
 #[derive(Copy, Clone)]
 pub struct ModelVertex {
     pub position: Vec3<f32>,
+    pub normal: Vec3<f32>,
     pub uv: Vec2<f32>,
 }
-glium::implement_vertex!(ModelVertex, position, uv);
+glium::implement_vertex!(ModelVertex, position, normal, uv);
+
+pub type ModelIndex = u16;
+

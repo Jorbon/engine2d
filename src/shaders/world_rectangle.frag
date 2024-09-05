@@ -7,6 +7,8 @@ out vec4 data;
 uniform sampler2D tex;
 
 void main() {
-	color = texture(tex, uv);
+	vec4 c = texture(tex, uv);
+	if (c.a < 0.1) discard;
+	color = c;
 	data = vec4(0, 0, 0, 0);
 }

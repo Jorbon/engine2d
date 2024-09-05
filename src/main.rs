@@ -207,6 +207,7 @@ fn main() {
 				
 				
 				
+				world.update_buffers(&display);
 				
 				let mut target = MultiOutputFrameBuffer::with_depth_buffer(&display, [
 					("color", &screen_texture),
@@ -214,8 +215,6 @@ fn main() {
 				], &depth_texture).unwrap();
 				target.clear_color_and_depth((0.0, 0.0, 0.0, 0.0), 0.0);
 				
-				
-				world.update_buffers(&display);
 				
 				for (location, cell) in &world.cells {
 					if let Some((vertex_buffer, index_buffer)) = &cell.buffers {

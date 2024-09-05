@@ -72,7 +72,7 @@ struct GeneratorSettings {
 
 
 
-pub const CELL_WIDTH_BITS: u16 = 6;
+pub const CELL_WIDTH_BITS: u16 = 4;
 pub const CELL_HEIGHT_BITS: u16 = 6;
 pub const CELL_WIDTH: usize = 1 << CELL_WIDTH_BITS;
 pub const CELL_HEIGHT: usize = 1 << CELL_HEIGHT_BITS;
@@ -84,8 +84,6 @@ pub const CELL_SIZE: Vec3<isize> = Vec3(CELL_WIDTH as isize, CELL_WIDTH as isize
 pub const CELL_MASK: Vec3<isize> = Vec3(CELL_XY_MASK, CELL_XY_MASK, CELL_Z_MASK);
 
 type CellTiles = [[[Tile; CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT];
-
-type ModelIndex = u16;
 
 
 impl std::ops::Index<Vec3<usize>> for CellTiles {
@@ -183,6 +181,32 @@ impl Cell {
 }
 
 
+const FACE_MODELS: Vec3<[Vec3<f32>; 4]> = Vec3(
+	[Vec3::Z, Vec3::ZERO, Vec3::Y, Vec3(0.0, 1.0, 1.0)],
+	[Vec3(1.0, 0.0, 1.0), Vec3::X, Vec3::ZERO, Vec3::Z],
+	[Vec3::X, Vec3(1.0, 1.0, 0.0), Vec3::Y, Vec3::ZERO],
+);
+
+
+fn add_face(vertices: &mut Vec<ModelVertex>, indices: &mut Vec<ModelIndex>, pos: Vec3<usize>, material: Material, a: Axis, negative_side: bool) {
+	let index_base = vertices.len() as ModelIndex;
+	indices.append(&mut [0, 1, 2, 0, 2, 3].iter().map(|i| i + index_base).collect());
+	
+	let mut corner = pos.as_type::<f32>();
+	if !negative_side {
+		corner += Vec3::<f32>::unit(a);
+	}
+	
+	let uv_corner = material.get_uv().as_type::<f32>();
+	vertices.append(&mut vec![
+		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {0} else {3}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner },
+		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {1} else {2}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner.add_y(1.0) },
+		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {2} else {1}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner.add_x(1.0).add_y(1.0) },
+		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {3} else {0}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner.add_x(1.0) },
+	]);
+}
+
+
 
 pub struct World {
 	pub cells: HashMap<Vec3<isize>, Cell>,
@@ -226,68 +250,65 @@ impl World {
 			match cell.tiles[pos] {
 				Air | Water => (),
 				Block(material) => {
-					for (a, c) in [
-						(X, (Vec3::<f32>::Z, Vec3::<f32>::ZERO, Vec3::<f32>::Y, Vec3::<f32>::Y + Vec3::<f32>::Z)),
-						(Y, (Vec3::<f32>::X + Vec3::<f32>::Z, Vec3::X, Vec3::ZERO, Vec3::Z)),
-						(Z, (Vec3::X, Vec3::<f32>::X + Vec3::<f32>::Y, Vec3::Y, Vec3::ZERO)),
-					] {
-						match
-							if pos[a] > 0 {
-								cell.tiles[pos - Vec3::<usize>::unit(a)]
-							} else if let Some(other_cell) = self.cells.get(&(location - Vec3::<isize>::unit(a))) {
-								other_cell.tiles[pos.with(a, CELL_SIZE[a] as usize - 1)]
-							} else if a == Z {
-								Air
-							} else {
-								continue
-							}
-						{
-							Block(_) => (),
-							Air | Water | Ramp(..) => {
-								let index_base = cell.vertices.len() as ModelIndex;
-								cell.indices.append(&mut [0, 1, 2, 0, 2, 3].iter().map(|i| i + index_base).collect());
-								
-								let corner = pos.as_type::<f32>();
-								let uv_corner = material.get_uv().as_type::<f32>();
-								cell.vertices.append(&mut vec![
-									ModelVertex { position: corner + c.0, uv: uv_corner },
-									ModelVertex { position: corner + c.1, uv: uv_corner.add_y(1.0) },
-									ModelVertex { position: corner + c.2, uv: uv_corner.add_x(1.0).add_y(1.0) },
-									ModelVertex { position: corner + c.3, uv: uv_corner.add_x(1.0) },
-								]);
-							}
-						}
-						
-						match
-							if pos[a] < CELL_SIZE[a] as usize - 1 {
-								cell.tiles[pos + Vec3::<usize>::unit(a)]
-							} else if let Some(other_cell) = self.cells.get(&(location + Vec3::<isize>::unit(a))) {
-								other_cell.tiles[pos.with(a, 0)]
-							} else if a == Z {
-								Air
-							} else {
-								continue
-							}
-						{
-							Block(_) => (),
-							Air | Water | Ramp(..) => {
-								let index_base = cell.vertices.len() as ModelIndex;
-								cell.indices.append(&mut [0, 1, 2, 0, 2, 3].iter().map(|i| i + index_base).collect());
-								
-								let corner = pos.as_type::<f32>() + Vec3::<f32>::unit(a);
-								let uv_corner = material.get_uv().as_type::<f32>();
-								cell.vertices.append(&mut vec![
-									ModelVertex { position: corner + c.3, uv: uv_corner },
-									ModelVertex { position: corner + c.2, uv: uv_corner.add_y(1.0) },
-									ModelVertex { position: corner + c.1, uv: uv_corner.add_x(1.0).add_y(1.0) },
-									ModelVertex { position: corner + c.0, uv: uv_corner.add_x(1.0) },
-								]);
+					for a in [X, Y, Z] {
+						for negative_side in [false, true] {
+							match
+								if if negative_side { pos[a] > 0 } else { pos[a] < CELL_SIZE[a] as usize - 1 } {
+									cell.tiles[if negative_side {
+										pos - Vec3::<usize>::unit(a)
+									} else {
+										pos + Vec3::<usize>::unit(a)
+									}]
+								} else if let Some(other_cell) = self.cells.get(&
+									if negative_side {
+										location - Vec3::<isize>::unit(a)
+									} else {
+										location + Vec3::<isize>::unit(a)
+									}
+								) {
+									other_cell.tiles[pos.with(a, if negative_side { CELL_SIZE[a] as usize - 1 } else { 0 })]
+								} else if a == Z {
+									Air
+								} else {
+									continue
+								}
+							{
+								Block(_) => (),
+								Air | Water | Ramp(..) => add_face(&mut cell.vertices, &mut cell.indices, pos, material, a, negative_side)
 							}
 						}
 					}
 				}
 				Ramp(_material, _direction, _level) => {
 					
+				}
+			}
+		}
+		
+		for a in [Y] {
+			for negative_side in [false] {
+				if let Some(other_cell) = self.cells.get_mut(&
+					if negative_side {
+						location + Vec3::<isize>::unit(a)
+					} else {
+						location - Vec3::<isize>::unit(a)
+					}
+				) {
+					for tile_pos in Vec3Range::<usize, ZYX>::exclusive(Vec3::ZERO, CELL_SIZE.as_type::<usize>().with(a, 1)) {
+						let mut this_tile_pos = tile_pos;
+						let mut other_tile_pos = tile_pos.with(a, CELL_SIZE[a] as usize - 1);
+						if negative_side { (this_tile_pos, other_tile_pos) = (other_tile_pos, this_tile_pos); }
+						
+						match other_cell.tiles[other_tile_pos] {
+							Air | Water | Ramp(..) => (),
+							Block(material) => match cell.tiles[this_tile_pos] {
+								Block(_) => (),
+								Air | Water | Ramp(..) => {
+									add_face(&mut other_cell.vertices, &mut other_cell.indices, other_tile_pos, material, a, negative_side)
+								}
+							}
+						}
+					}
 				}
 			}
 		}

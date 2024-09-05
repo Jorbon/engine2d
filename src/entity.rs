@@ -169,7 +169,7 @@ impl Entity {
 		if self.jump_input {
 			for normal in &normals {
 				if normal.z() > 0.0 {
-					self.velocity -= self.get_force().normalize_or_zero() * 2.0;
+					self.velocity -= self.get_force().normalize_or_zero() * 5.0;
 					break;
 				}
 			}
