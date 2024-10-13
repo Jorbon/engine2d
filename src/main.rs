@@ -215,7 +215,7 @@ fn main() {
 				], &depth_texture).unwrap();
 				target.clear_color_and_depth((0.0, 0.0, 0.0, 0.0), 0.0);
 				
-				
+				// MARK: Draw Tilemap
 				for (location, cell) in &world.cells {
 					if let Some((vertex_buffer, index_buffer)) = &cell.buffers {
 						target.draw(vertex_buffer, index_buffer, &tilemap_program, &UniformsStorage::
@@ -253,7 +253,7 @@ fn main() {
 				}
 				
 				
-				
+				// MARK: Draw Entities
 				world.entities.iter().rev().for_each(|entity| {
 					target.draw(&rect_vertex_buffer, &rect_index_buffer, &world_texture_program, &UniformsStorage::
 						 new("texture_position", entity.position.as_type::<f32>() + entity.size.scale(LOW_CORNER).as_type::<f32>().add_z(0.01))
@@ -287,6 +287,7 @@ fn main() {
 				});
 				
 				
+				// MARK: Debug noise renderer
 				// let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
 				
 				// let mut noise_data = vec![vec![0.0; window_width as usize]; window_height as usize];
@@ -299,6 +300,7 @@ fn main() {
 				// screen_texture = Texture2d::with_format(&display, noise_data, glium::texture::UncompressedFloatFormat::F32, MipmapsOption::NoMipmap).unwrap();
 				
 				
+				// MARK: Post-processing
 				let mut display_target = display.draw();
 				display_target.draw(&rect_vertex_buffer, &rect_index_buffer, &post_program, &UniformsStorage::
 					 new("aspect_ratio", aspect_ratio)

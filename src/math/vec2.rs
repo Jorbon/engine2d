@@ -57,6 +57,7 @@ impl<T> Vec2<T> where {
 			Z => self,
 		}
 	}
+	pub fn with_z(self, v: T) -> Vec3<T> { Vec3(self.0, self.1, v) }
 	
 	pub fn add_x<U>(self, v: U) -> Self where T: Add<U, Output = T> { Self(self.0 + v, self.1) }
 	pub fn add_y<U>(self, v: U) -> Self where T: Add<U, Output = T> { Self(self.0, self.1 + v) }

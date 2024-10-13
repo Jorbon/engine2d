@@ -72,7 +72,7 @@ struct GeneratorSettings {
 
 
 
-pub const CELL_WIDTH_BITS: u16 = 4;
+pub const CELL_WIDTH_BITS: u16 = 6;
 pub const CELL_HEIGHT_BITS: u16 = 6;
 pub const CELL_WIDTH: usize = 1 << CELL_WIDTH_BITS;
 pub const CELL_HEIGHT: usize = 1 << CELL_HEIGHT_BITS;
@@ -188,6 +188,8 @@ const FACE_MODELS: Vec3<[Vec3<f32>; 4]> = Vec3(
 );
 
 
+const UV_MARGIN: f32 = 0.0001;
+
 fn add_face(vertices: &mut Vec<ModelVertex>, indices: &mut Vec<ModelIndex>, pos: Vec3<usize>, material: Material, a: Axis, negative_side: bool) {
 	let index_base = vertices.len() as ModelIndex;
 	indices.append(&mut [0, 1, 2, 0, 2, 3].iter().map(|i| i + index_base).collect());
@@ -199,10 +201,10 @@ fn add_face(vertices: &mut Vec<ModelVertex>, indices: &mut Vec<ModelIndex>, pos:
 	
 	let uv_corner = material.get_uv().as_type::<f32>();
 	vertices.append(&mut vec![
-		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {0} else {3}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner },
-		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {1} else {2}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner.add_y(1.0) },
-		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {2} else {1}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner.add_x(1.0).add_y(1.0) },
-		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {3} else {0}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner.add_x(1.0) },
+		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {0} else {3}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner + Vec2(UV_MARGIN, UV_MARGIN) },
+		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {1} else {2}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner + Vec2(UV_MARGIN, 1.0 - UV_MARGIN) },
+		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {2} else {1}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner + Vec2(1.0 - UV_MARGIN, 1.0 - UV_MARGIN) },
+		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {3} else {0}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner + Vec2(1.0 - UV_MARGIN, UV_MARGIN) },
 	]);
 }
 
@@ -285,8 +287,8 @@ impl World {
 			}
 		}
 		
-		for a in [Y] {
-			for negative_side in [false] {
+		for a in [Z, Y, X] {
+			for negative_side in [false, true] {
 				if let Some(other_cell) = self.cells.get_mut(&
 					if negative_side {
 						location + Vec3::<isize>::unit(a)
@@ -309,6 +311,8 @@ impl World {
 							}
 						}
 					}
+					
+					other_cell.update_mesh = true;
 				}
 			}
 		}
