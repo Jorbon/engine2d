@@ -1,11 +1,10 @@
 use std::{cmp::Ordering, marker::PhantomData, ops::{Add, AddAssign, Div, Mul, Rem, Sub, SubAssign}};
+use num_traits::{ConstOne, PrimInt};
 
 mod vec2;
 mod vec3;
-
-use num_traits::{ConstOne, PrimInt};
-pub use vec2::Vec2;
-pub use vec3::Vec3;
+pub use vec2::*;
+pub use vec3::*;
 
 pub trait Modulo<T> { fn modulo(self, rhs: T) -> Self; }
 impl<T> Modulo<T> for f32 where

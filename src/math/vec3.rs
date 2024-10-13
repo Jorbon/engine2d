@@ -22,7 +22,7 @@ impl<T> Vec3<T> where T: ConstZero + ConstOne {
 	pub const XYZ: Self = Self(T::ONE, T::ONE, T::ONE);
 }
 
-impl<T> Vec3<T> where {
+impl<T> Vec3<T> {
 	pub const fn x(self) -> T where T: Copy { self.0 }
 	pub const fn y(self) -> T where T: Copy { self.1 }
 	pub const fn z(self) -> T where T: Copy { self.2 }

@@ -1,7 +1,7 @@
 use std::{fmt::Debug, ops::{Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign}};
 
 use glium::{uniforms::{AsUniformValue, UniformValue}, vertex::{Attribute, AttributeType}, Vertex, VertexFormat};
-use num_traits::{real::Real, AsPrimitive, ConstOne, ConstZero, Float, Zero};
+use num_traits::{AsPrimitive, ConstOne, ConstZero, Float, Signed, Zero};
 
 use super::{Axis::{self, *}, Direction::{self, *}, Modulo, Vec3};
 
@@ -18,7 +18,7 @@ impl<T> Vec2<T> where T: ConstZero + ConstOne {
 	pub const XY: Self = Self(T::ONE, T::ONE);
 }
 
-impl<T> Vec2<T> where {
+impl<T> Vec2<T> {
 	pub const fn x(self) -> T where T: Copy { self.0 }
 	pub const fn y(self) -> T where T: Copy { self.1 }
 	
@@ -136,7 +136,7 @@ impl<T> Vec2<T> where {
 	
 	pub fn abs(self) -> Self
 	where
-		T: Real
+		T: Signed
 	{ Self(self.0.abs(), self.1.abs() ) }
 	
 	pub fn vec3_xy(self) -> Vec3<T>
