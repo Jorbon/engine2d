@@ -2,6 +2,7 @@ use num_traits::ConstZero;
 
 use crate::*;
 
+
 fn int_hash(mut x: u64, seed: u64) -> u64 {
 	x ^= seed;
 	x = (x ^ (x >> 30)).overflowing_mul(0xbf58476d1ce4e5b9).0;
@@ -15,7 +16,7 @@ fn gradient(v: Vec2<i32>, seed: u64) -> Vec2<f64> {
 	Vec2((h >> 32) as f64 / 0x80000000u32 as f64 - 1.0, (h & 0xffffffff) as f64 / 0x80000000u32 as f64 - 1.0)
 }
 
-pub fn perlin_noise(position: Vec2<f64>, seed: u64) -> f64 {
+pub fn perlin_noise(position: Vec2<f64>, seed: u64) -> (f64, Vec2<f64>) {
 	let Vec2(lx, ly) = position.floor_to::<i32>();
 	let Vec2(hx, hy) = position.ceil_to::<i32>();
 	let Vec2(px, py) = position.modulo(1.0);
@@ -26,36 +27,57 @@ pub fn perlin_noise(position: Vec2<f64>, seed: u64) -> f64 {
 	let nx2 = nx*nx;
 	let ny2 = ny*ny;
 	
-	let mut lld = (1.0 - (px2 + py2)).max(0.0); lld *= lld; lld *= lld;
-	let mut hld = (1.0 - (nx2 + py2)).max(0.0); hld *= hld; hld *= hld;
-	let mut lhd = (1.0 - (px2 + ny2)).max(0.0); lhd *= lhd; lhd *= lhd;
-	let mut hhd = (1.0 - (nx2 + ny2)).max(0.0); hhd *= hhd; hhd *= hhd;
+	
+	let distance_ll = (1.0 - (px2 + py2)).max(0.0); let distance_ll2 = distance_ll * distance_ll; let distance_ll4 = distance_ll2 * distance_ll2;
+	let distance_hl = (1.0 - (nx2 + py2)).max(0.0); let distance_hl2 = distance_hl * distance_hl; let distance_hl4 = distance_hl2 * distance_hl2;
+	let distance_lh = (1.0 - (px2 + ny2)).max(0.0); let distance_lh2 = distance_lh * distance_lh; let distance_lh4 = distance_lh2 * distance_lh2;
+	let distance_hh = (1.0 - (nx2 + ny2)).max(0.0); let distance_hh2 = distance_hh * distance_hh; let distance_hh4 = distance_hh2 * distance_hh2;
+	
+	let gradient_ll = gradient(Vec2(lx, ly), seed);
+	let gradient_hl = gradient(Vec2(hx, ly), seed);
+	let gradient_lh = gradient(Vec2(lx, hy), seed);
+	let gradient_hh = gradient(Vec2(hx, hy), seed);
+	
+	let gradient_dot_ll = gradient_ll.dot(Vec2(px, py));
+	let gradient_dot_hl = gradient_hl.dot(Vec2(nx, py));
+	let gradient_dot_lh = gradient_lh.dot(Vec2(px, ny));
+	let gradient_dot_hh = gradient_hh.dot(Vec2(nx, ny));
 	
 	(
-		gradient(Vec2(lx, ly), seed).dot(Vec2(px, py)) * lld + 
-		gradient(Vec2(hx, ly), seed).dot(Vec2(nx, py)) * hld + 
-		gradient(Vec2(lx, hy), seed).dot(Vec2(px, ny)) * lhd + 
-		gradient(Vec2(hx, hy), seed).dot(Vec2(nx, ny)) * hhd
-	) * 128.0 / 81.0
-	
-	// gradient(Vec2(lx, ly), seed).dot(Vec2(px, py)) * lld
+		(
+			gradient_dot_ll * distance_ll4 + 
+			gradient_dot_hl * distance_hl4 + 
+			gradient_dot_lh * distance_lh4 + 
+			gradient_dot_hh * distance_hh4
+		) * 128.0 / 81.0,
+		Vec2(
+			if distance_ll > 0.0 {gradient_ll.x() * distance_ll4 - 8.0 * px * gradient_dot_ll * distance_ll2 * distance_ll} else {0.0} + 
+			if distance_hl > 0.0 {gradient_hl.x() * distance_hl4 - 8.0 * nx * gradient_dot_hl * distance_hl2 * distance_hl} else {0.0} + 
+			if distance_lh > 0.0 {gradient_lh.x() * distance_lh4 - 8.0 * px * gradient_dot_lh * distance_lh2 * distance_lh} else {0.0} + 
+			if distance_hh > 0.0 {gradient_hh.x() * distance_hh4 - 8.0 * nx * gradient_dot_hh * distance_hh2 * distance_hh} else {0.0},
+			if distance_ll > 0.0 {gradient_ll.y() * distance_ll4 - 8.0 * py * gradient_dot_ll * distance_ll2 * distance_ll} else {0.0} + 
+			if distance_hl > 0.0 {gradient_hl.y() * distance_hl4 - 8.0 * py * gradient_dot_hl * distance_hl2 * distance_hl} else {0.0} + 
+			if distance_lh > 0.0 {gradient_lh.y() * distance_lh4 - 8.0 * ny * gradient_dot_lh * distance_lh2 * distance_lh} else {0.0} + 
+			if distance_hh > 0.0 {gradient_hh.y() * distance_hh4 - 8.0 * ny * gradient_dot_hh * distance_hh2 * distance_hh} else {0.0},
+		) * 128.0 / 81.0
+	)
 }
 
-pub fn perlin_noise2(position: Vec2<f64>, seed: u64) -> f64 {
-	let Vec2(lx, ly) = position.floor_to::<i32>();
-	let Vec2(hx, hy) = position.ceil_to::<i32>();
-	let Vec2(px, py) = position.modulo(1.0);
-	let tx = ((6.0 * px - 15.0) * px + 10.0) * px * (px * px);
-	let ty = ((6.0 * py - 15.0) * py + 10.0) * py * (py * py);
-	(
-		gradient(Vec2(lx, ly), seed).dot(Vec2(px, py)) * (1.0 - tx) + 
-		gradient(Vec2(hx, ly), seed).dot(Vec2(px - 1.0, py)) * tx
-	) * (1.0 - ty) + 
-	(
-		gradient(Vec2(lx, hy), seed).dot(Vec2(px, py - 1.0)) * (1.0 - tx) + 
-		gradient(Vec2(hx, hy), seed).dot(Vec2(px - 1.0, py - 1.0)) * tx
-	) * ty
-}
+// pub fn perlin_noise2(position: Vec2<f64>, seed: u64) -> f64 {
+// 	let Vec2(lx, ly) = position.floor_to::<i32>();
+// 	let Vec2(hx, hy) = position.ceil_to::<i32>();
+// 	let Vec2(px, py) = position.modulo(1.0);
+// 	let tx = ((6.0 * px - 15.0) * px + 10.0) * px * (px * px);
+// 	let ty = ((6.0 * py - 15.0) * py + 10.0) * py * (py * py);
+// 	(
+// 		gradient(Vec2(lx, ly), seed).dot(Vec2(px, py)) * (1.0 - tx) + 
+// 		gradient(Vec2(hx, ly), seed).dot(Vec2(px - 1.0, py)) * tx
+// 	) * (1.0 - ty) + 
+// 	(
+// 		gradient(Vec2(lx, hy), seed).dot(Vec2(px, py - 1.0)) * (1.0 - tx) + 
+// 		gradient(Vec2(hx, hy), seed).dot(Vec2(px - 1.0, py - 1.0)) * tx
+// 	) * ty
+// }
 
 
 
@@ -117,16 +139,21 @@ impl Cell {
 		
 		for pos in Vec3Range::<usize, ZYX>::exclusive(Vec3::ZERO, Vec3(CELL_WIDTH, CELL_WIDTH, 1)) {
 			let tile_pos = (location << CELL_SIZE_BITS) + pos.as_type::<isize>();
-			let mut h = 0.0;
-			let mut size = 1.0 / gen.large_size;
+			let mut height = 0.0;
+			let mut slope = Vec2::<f64>::ZERO;
+			let mut inverse_size = 1.0 / gen.large_size;
 			let mut weight = 1.0;
-			while size <= 1.0 / gen.small_size {
-				h += perlin_noise(tile_pos.xy().as_type::<f64>() * size, gen.seed) * weight;
-				size *= gen.octave_size;
+			while inverse_size <= 1.0 / gen.small_size {
+				let (value, gradient) = perlin_noise(tile_pos.xy().as_type::<f64>() * inverse_size, gen.seed);
+				height += value * weight;
+				slope += gradient * weight * inverse_size;
+				
+				inverse_size *= gen.octave_size;
 				weight /= gen.octave_weight;
 			}
 			
-			let h = (h * gen.height_scale + gen.center).round() as usize;
+			let height = (height * gen.height_scale + gen.center).floor() as usize;
+			let slope = slope * gen.height_scale;
 			
 			let materials = [
 				Stone,
@@ -161,12 +188,14 @@ impl Cell {
 				Stone,
 			];
 			
-			for z in 0..h {
-				tiles[pos + Vec3::<usize>::Z * z] = Block(materials[z]);
+			for z in 0..height {
+				tiles[pos.with_z(z)] = Block(materials[z]);
 			}
-			for z in h..gen.center.round() as usize {
-				tiles[pos + Vec3::<usize>::Z * z] = Water;
-			}
+			let direction = (slope.with_z(-1.0) * -8.0).round_to();
+			tiles[pos.with_z(height)] = Ramp(materials[height], encode_ramp_direction(direction), (direction.x() + direction.y() + direction.z()) / 2);
+			// for z in height..gen.center.round() as usize {
+			// 	tiles[pos.with_z(z)] = Water;
+			// }
 		}
 		
 		Cell {
@@ -181,31 +210,81 @@ impl Cell {
 }
 
 
-const FACE_MODELS: Vec3<[Vec3<f32>; 4]> = Vec3(
-	[Vec3::Z, Vec3::ZERO, Vec3::Y, Vec3(0.0, 1.0, 1.0)],
-	[Vec3(1.0, 0.0, 1.0), Vec3::X, Vec3::ZERO, Vec3::Z],
-	[Vec3::X, Vec3(1.0, 1.0, 0.0), Vec3::Y, Vec3::ZERO],
+const FACE_MODELS_POSITIVE: Vec3<[Vec3<f32>; 4]> = Vec3(
+	[
+		Vec3(1.0, 1.0, 1.0),
+		Vec3(1.0, 1.0, 0.0),
+		Vec3(1.0, 0.0, 0.0),
+		Vec3(1.0, 0.0, 1.0),
+	], [
+		Vec3(0.0, 1.0, 1.0),
+		Vec3(0.0, 1.0, 0.0),
+		Vec3(1.0, 1.0, 0.0),
+		Vec3(1.0, 1.0, 1.0),
+	], [
+		Vec3(0.0, 0.0, 1.0),
+		Vec3(0.0, 1.0, 1.0),
+		Vec3(1.0, 1.0, 1.0),
+		Vec3(1.0, 0.0, 1.0),
+	],
 );
-
+const FACE_MODELS_NEGATIVE: Vec3<[Vec3<f32>; 4]> = Vec3(
+	[
+		Vec3(0.0, 0.0, 1.0),
+		Vec3(0.0, 0.0, 0.0),
+		Vec3(0.0, 1.0, 0.0),
+		Vec3(0.0, 1.0, 1.0),
+	], [
+		Vec3(1.0, 0.0, 1.0),
+		Vec3(1.0, 0.0, 0.0),
+		Vec3(0.0, 0.0, 0.0),
+		Vec3(0.0, 0.0, 1.0),
+	], [
+		Vec3(1.0, 0.0, 0.0),
+		Vec3(1.0, 1.0, 0.0),
+		Vec3(0.0, 1.0, 0.0),
+		Vec3(0.0, 0.0, 0.0),
+	],
+);
 
 const UV_MARGIN: f32 = 0.0001;
 
-fn add_face(vertices: &mut Vec<ModelVertex>, indices: &mut Vec<ModelIndex>, pos: Vec3<usize>, material: Material, a: Axis, negative_side: bool) {
+const FACE_UVS: [Vec2<f32>; 4] = [
+	Vec2(UV_MARGIN, UV_MARGIN),
+	Vec2(UV_MARGIN, 1.0 - UV_MARGIN),
+	Vec2(1.0 - UV_MARGIN, 1.0 - UV_MARGIN),
+	Vec2(1.0 - UV_MARGIN, UV_MARGIN),
+];
+
+
+
+fn add_face(vertices: &mut Vec<ModelVertex>, indices: &mut Vec<ModelIndex>, pos: Vec3<usize>, material: Material, d: Direction) {
 	let index_base = vertices.len() as ModelIndex;
 	indices.append(&mut [0, 1, 2, 0, 2, 3].iter().map(|i| i + index_base).collect());
 	
-	let mut corner = pos.as_type::<f32>();
-	if !negative_side {
-		corner += Vec3::<f32>::unit(a);
-	}
-	
+	let pos = pos.as_type::<f32>();
 	let uv_corner = material.get_uv().as_type::<f32>();
-	vertices.append(&mut vec![
-		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {0} else {3}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner + Vec2(UV_MARGIN, UV_MARGIN) },
-		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {1} else {2}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner + Vec2(UV_MARGIN, 1.0 - UV_MARGIN) },
-		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {2} else {1}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner + Vec2(1.0 - UV_MARGIN, 1.0 - UV_MARGIN) },
-		ModelVertex { position: corner + FACE_MODELS[a][if negative_side {3} else {0}], normal: Vec3::<f32>::unit(a) * if negative_side {-1.0} else {1.0}, uv: uv_corner + Vec2(1.0 - UV_MARGIN, UV_MARGIN) },
-	]);
+	
+	vertices.append(&mut (0..4).map(|i| ModelVertex {
+		position: pos + if d.is_positive() {FACE_MODELS_POSITIVE} else {FACE_MODELS_NEGATIVE}[d.axis()][i],
+		normal: Vec3::<f32>::unit(d),
+		uv: uv_corner + FACE_UVS[i],
+	}).collect());
+}
+
+fn adjacent_tile_has_full_face(d: Direction, adjacent_tile: Tile) -> bool {
+	match adjacent_tile {
+		Block(_) => true,
+		Air | Water => false,
+		Ramp(_material, direction, level) => {
+			let direction = decode_ramp_direction(direction);
+			let a = d.axis();
+			match d.is_positive() {
+				true => direction[a] > 0 && level >= direction[a.l()].max(0) + direction[a.r()].max(0),
+				false => direction[a] < 0 && level >= direction[a] + direction[a.l()] + direction[a.r()],
+			}
+		}
+	}
 }
 
 
@@ -223,8 +302,8 @@ impl World {
 			entities: vec![],
 			generator_settings: GeneratorSettings {
 				seed: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-				large_size: 128.0,
-				small_size: 1.0,
+				large_size: 64.0,
+				small_size: 4.0,
 				octave_size: 2.0,
 				octave_weight: 2.0,
 				height_scale: 16.0,
@@ -233,14 +312,18 @@ impl World {
 		}
 	}
 	
-	pub fn get_or_load(&mut self, location: Vec3<isize>) -> &Cell {
+	pub fn get_or_load_cell(&mut self, location: Vec3<isize>) -> &Cell {
 		if !self.cells.contains_key(&location) { self.load(location); }
 		self.cells.get(&location).unwrap()
 	}
 	
-	pub fn get_or_load_mut(&mut self, location: Vec3<isize>) -> &mut Cell {
+	pub fn get_or_load_cell_mut(&mut self, location: Vec3<isize>) -> &mut Cell {
 		if !self.cells.contains_key(&location) { self.load(location); }
 		self.cells.get_mut(&location).unwrap()
+	}
+	
+	pub fn get_block(&mut self, position: Vec3<isize>) -> Tile {
+		self.get_or_load_cell(position >> CELL_SIZE_BITS).tiles[(position & CELL_MASK).as_type()]
 	}
 	
 	pub fn load(&mut self, location: Vec3<isize>) {
@@ -252,68 +335,105 @@ impl World {
 			match cell.tiles[pos] {
 				Air | Water => (),
 				Block(material) => {
-					for a in [X, Y, Z] {
-						for negative_side in [false, true] {
-							match
-								if if negative_side { pos[a] > 0 } else { pos[a] < CELL_SIZE[a] as usize - 1 } {
-									cell.tiles[if negative_side {
-										pos - Vec3::<usize>::unit(a)
-									} else {
-										pos + Vec3::<usize>::unit(a)
-									}]
-								} else if let Some(other_cell) = self.cells.get(&
-									if negative_side {
-										location - Vec3::<isize>::unit(a)
-									} else {
-										location + Vec3::<isize>::unit(a)
-									}
-								) {
-									other_cell.tiles[pos.with(a, if negative_side { CELL_SIZE[a] as usize - 1 } else { 0 })]
-								} else if a == Z {
-									Air
-								} else {
-									continue
-								}
-							{
-								Block(_) => (),
-								Air | Water | Ramp(..) => add_face(&mut cell.vertices, &mut cell.indices, pos, material, a, negative_side)
+					for d in [PX, PY, PZ, NX, NY, NZ] {
+						if !adjacent_tile_has_full_face(d,
+							if match d.is_positive() {
+								true => pos[d.axis()] < CELL_SIZE[d.axis()] as usize - 1,
+								false => pos[d.axis()] > 0,
+							} {
+								cell.tiles[(pos.as_type::<isize>() + Vec3::<isize>::unit(d)).as_type::<usize>()]
+							} else if let Some(other_cell) = self.cells.get(&(location + Vec3::<isize>::unit(d))) {
+								other_cell.tiles[pos.with(d.axis(), if d.is_positive() {0} else {CELL_SIZE[d.axis()] as usize - 1})]
+							} else if d.axis() == Z {
+								Air
+							} else {
+								continue
 							}
+						) {
+							add_face(&mut cell.vertices, &mut cell.indices, pos, material, d);
 						}
 					}
 				}
-				Ramp(_material, _direction, _level) => {
+				Ramp(material, direction, level) => {
+					let direction = decode_ramp_direction(direction);
+					
+					let (mut min_level, mut max_level) = (0, 0);
+					direction.map(|v| if v > 0 { max_level += v } else { min_level += v });
+					
+					if level <= min_level { println!("Empty ramp"); continue }
+					if level >= max_level { println!("Full ramp"); continue }
+					
+					let direction_abs = direction.abs();
+					let level_abs = level + (-direction.x()).max(0) + (-direction.y()).max(0) + (-direction.z()).max(0);
+					let mut v = vec![];
+					for a in [X, Y, Z] {
+						if level_abs <= direction_abs[a] {
+							v.push(Vec3::ZERO.with(a, level_abs as f32 / direction_abs[a] as f32));
+						} else {
+							if level_abs >= direction_abs[a] + direction_abs[a.l()] {
+								v.push(Vec3::XYZ.with(a.r(), (level_abs - (direction_abs[a] + direction_abs[a.l()])) as f32 / direction_abs[a.r()] as f32));
+							} else {
+								v.push(Vec3::positive_unit(a).with(a.l(), (level_abs - direction_abs[a]) as f32 / direction_abs[a.l()] as f32));
+							}
+							
+							if level_abs < direction_abs[a] + direction_abs[a.r()] {
+								v.push(Vec3::positive_unit(a).with(a.r(), (level_abs - direction_abs[a]) as f32 / direction_abs[a.r()] as f32));
+							}
+						}
+					}
+					
+					let pos = pos.as_type::<f32>();
+					let normal = direction.as_type::<f32>().normalize();
+					let uv_corner = material.get_uv().as_type::<f32>();
+					
+					let index_base = cell.vertices.len() as ModelIndex;
+					let index_iter = match v.len() {
+						3 => [0, 1, 2].iter(),
+						4 => [0, 1, 2, 0, 2, 3].iter(),
+						5 => [0, 1, 2, 0, 2, 3, 0, 3, 4].iter(),
+						6 => [0, 2, 4, 0, 1, 2, 2, 3, 4, 4, 5, 0].iter(),
+						n => panic!("{n} vertices on slope face")
+					};
+					
+					cell.indices.append(&mut match {
+						let mut reverse = true;
+						direction.map(|v| if v < 0 { reverse = !reverse });
+						reverse
+					} {
+						false => index_iter.map(|i| i + index_base).collect(),
+						true => index_iter.rev().map(|i| i + index_base).collect(),
+					});
+					
+					for vertex in v {
+						let vertex = Vec3::by_axis(|a| if direction[a] >= 0 {vertex[a]} else {1.0 - vertex[a]});
+						cell.vertices.push(ModelVertex {
+							position: pos + vertex,
+							normal,
+							uv: uv_corner + vertex.xy(),
+						});
+					}
+					
 					
 				}
 			}
 		}
 		
-		for a in [Z, Y, X] {
-			for negative_side in [false, true] {
-				if let Some(other_cell) = self.cells.get_mut(&
-					if negative_side {
-						location + Vec3::<isize>::unit(a)
-					} else {
-						location - Vec3::<isize>::unit(a)
-					}
-				) {
-					for tile_pos in Vec3Range::<usize, ZYX>::exclusive(Vec3::ZERO, CELL_SIZE.as_type::<usize>().with(a, 1)) {
-						let mut this_tile_pos = tile_pos;
-						let mut other_tile_pos = tile_pos.with(a, CELL_SIZE[a] as usize - 1);
-						if negative_side { (this_tile_pos, other_tile_pos) = (other_tile_pos, this_tile_pos); }
-						
-						match other_cell.tiles[other_tile_pos] {
-							Air | Water | Ramp(..) => (),
-							Block(material) => match cell.tiles[this_tile_pos] {
-								Block(_) => (),
-								Air | Water | Ramp(..) => {
-									add_face(&mut other_cell.vertices, &mut other_cell.indices, other_tile_pos, material, a, negative_side)
-								}
-							}
+		for d in [PX, PY, PZ, NX, NY, NZ] {
+			if let Some(other_cell) = self.cells.get_mut(&(location - Vec3::<isize>::unit(d))) {
+				for tile_pos in Vec3Range::<usize, ZYX>::exclusive(Vec3::ZERO, CELL_SIZE.as_type::<usize>().with(d.axis(), 1)) {
+					let mut this_tile_pos = tile_pos;
+					let mut other_tile_pos = tile_pos.with(d.axis(), CELL_SIZE[d.axis()] as usize - 1);
+					if d.is_negative() { (this_tile_pos, other_tile_pos) = (other_tile_pos, this_tile_pos); }
+					
+					match other_cell.tiles[other_tile_pos] {
+						Air | Water | Ramp(..) => (),
+						Block(material) => if !adjacent_tile_has_full_face(d, cell.tiles[this_tile_pos]) {
+							add_face(&mut other_cell.vertices, &mut other_cell.indices, other_tile_pos, material, d);
 						}
 					}
-					
-					other_cell.update_mesh = true;
 				}
+				
+				other_cell.update_mesh = true;
 			}
 		}
 		
@@ -329,7 +449,7 @@ impl World {
 		let tile_pos = position.floor_to::<isize>();
 		let cell_location = tile_pos >> CELL_SIZE_BITS;
 		let pos_in_cell = (tile_pos & CELL_MASK).as_type::<usize>();
-		let cell = self.get_or_load(cell_location.with_z(0));
+		let cell = self.get_or_load_cell(cell_location.with_z(0));
 		
 		for z in (0..CELL_HEIGHT).rev() {
 			match cell.tiles[pos_in_cell.with_z(z)] {

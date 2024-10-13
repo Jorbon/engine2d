@@ -1,17 +1,25 @@
 use std::{fmt::Debug, ops::{Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign}};
 
 use glium::{uniforms::{AsUniformValue, UniformValue}, vertex::{Attribute, AttributeType}, VertexFormat};
-use num_traits::{AsPrimitive, ConstOne, ConstZero, Float, Zero};
+use num_traits::{AsPrimitive, ConstOne, ConstZero, Float, Signed, Zero};
 
-use super::{Axis::{self, *},Modulo, Vec2};
+use super::{Axis::{self, *}, Direction::{self, *}, Modulo, Vec2};
 
 #[derive(Copy, Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct Vec3<T>(pub T, pub T, pub T);
+
+impl<T> ConstZero for Vec3<T> where
+	T: ConstZero
+{ const ZERO: Self = Self(T::ZERO, T::ZERO, T::ZERO); }
 
 impl<T> Vec3<T> where T: ConstZero + ConstOne {
 	pub const X: Self = Self(T::ONE, T::ZERO, T::ZERO);
 	pub const Y: Self = Self(T::ZERO, T::ONE, T::ZERO);
 	pub const Z: Self = Self(T::ZERO, T::ZERO, T::ONE);
+	pub const XY: Self = Self(T::ONE, T::ONE, T::ZERO);
+	pub const XZ: Self = Self(T::ONE, T::ZERO, T::ONE);
+	pub const YZ: Self = Self(T::ZERO, T::ONE, T::ONE);
+	pub const XYZ: Self = Self(T::ONE, T::ONE, T::ONE);
 }
 
 impl<T> Vec3<T> where {
@@ -30,7 +38,21 @@ impl<T> Vec3<T> where {
 		T: Copy
 	{ Self(c, c, c) }
 	
-	pub const fn unit(axis: Axis) -> Self
+	pub fn unit(direction: Direction) -> Self
+	where
+		T: ConstZero + ConstOne + Neg<Output = T>
+	{
+		match direction {
+			PX => Self::X,
+			PY => Self::Y,
+			PZ => Self::Z,
+			NX => -Self::X,
+			NY => -Self::Y,
+			NZ => -Self::Z,
+		}
+	}
+	
+	pub const fn positive_unit(axis: Axis) -> Self
 	where
 		T: ConstZero + ConstOne
 	{
@@ -38,6 +60,18 @@ impl<T> Vec3<T> where {
 			X => Self::X,
 			Y => Self::Y,
 			Z => Self::Z,
+		}
+	}
+	
+	pub const fn positive_unit_pair(axis1: Axis, axis2: Axis) -> Self
+	where
+		T: ConstZero + ConstOne
+	{
+		match (axis1, axis2) {
+			(X, Y) | (Y, X) => Self::XY,
+			(X, Z) | (Z, X) => Self::XZ,
+			(Y, Z) | (Z, Y) => Self::YZ,
+			(X, X) | (Y, Y) | (Z, Z) => panic!("Duplicate axis passed to positive_unit_pair")
 		}
 	}
 	
@@ -130,6 +164,11 @@ impl<T> Vec3<T> where {
 		T: Div<U>
 	{ Vec3(self.0 / v.0, self.1 / v.1, self.2 / v.2) }
 	
+	pub fn abs(self) -> Self
+	where
+		T: Signed
+	{ Self(self.0.abs(), self.1.abs(), self.2.abs() ) }
+	
 	pub fn as_type<U>(self) -> Vec3<U>
 	where
 		T: Copy + 'static + AsPrimitive<U>,
@@ -142,12 +181,15 @@ impl<T> Vec3<T> where {
 	{ Vec3(self.0.into(), self.1.into(), self.2.into()) }
 }
 
+
+
 impl<T> Vec3<T> where T: Float {
 	pub fn length(self) -> T { self.length_as::<T>() }
 	pub fn normalize(self) -> Self { self.normalize_as::<T>() }
 	pub fn normalize_or_zero(self) -> Self { if self.is_zero() { Self::zero() } else { self.normalize() } }
 	pub fn floor(self) -> Self { Self(self.0.floor(), self.1.floor(), self.2.floor()) }
 	pub fn ceil(self) -> Self { Self(self.0.ceil(), self.1.ceil(), self.2.ceil()) }
+	pub fn round(self) -> Self { Self(self.0.round(), self.1.round(), self.2.round()) }
 	
 	pub fn floor_to<U>(self) -> Vec3<U>
 	where
@@ -160,6 +202,12 @@ impl<T> Vec3<T> where T: Float {
 		T: Copy + 'static + AsPrimitive<U>,
 		U: Copy + 'static
 	{ self.ceil().as_type::<U>() }
+	
+	pub fn round_to<U>(self) -> Vec3<U>
+	where
+		T: Copy + 'static + AsPrimitive<U>,
+		U: Copy + 'static
+	{ self.round().as_type::<U>() }
 }
 
 impl<T> Zero for Vec3<T> where
@@ -169,10 +217,6 @@ impl<T> Zero for Vec3<T> where
 	fn is_zero(&self) -> bool { self.0.is_zero() && self.1.is_zero() && self.2.is_zero() }
 	fn set_zero(&mut self) { *self = Self::zero() }
 }
-
-impl<T> ConstZero for Vec3<T> where
-	T: ConstZero
-{ const ZERO: Self = Self(T::ZERO, T::ZERO, T::ZERO); }
 
 
 

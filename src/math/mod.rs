@@ -74,15 +74,31 @@ impl<T> Iterator for DirectionalRange<T> where
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Axis { X, Y, Z }
 pub use Axis::*;
+impl Axis {
+	pub const fn l(self) -> Self { match self { X => Z, Y => X, Z => Y } }
+	pub const fn r(self) -> Self { match self { X => Y, Y => Z, Z => X } }
+	pub const fn p(self) -> Direction { match self { X => PX, Y => PY, Z => PZ } }
+	pub const fn n(self) -> Direction { match self { X => NX, Y => NY, Z => NZ } }
+}
 
 
-pub trait DirectionOrder { const AXIS: [Axis; 3]; }
-pub enum XYZ {} impl DirectionOrder for XYZ { const AXIS: [Axis; 3] = [X,Y,Z]; }
-pub enum XZY {} impl DirectionOrder for XZY { const AXIS: [Axis; 3] = [X,Z,Y]; }
-pub enum YXZ {} impl DirectionOrder for YXZ { const AXIS: [Axis; 3] = [Y,X,Z]; }
-pub enum YZX {} impl DirectionOrder for YZX { const AXIS: [Axis; 3] = [Y,Z,X]; }
-pub enum ZXY {} impl DirectionOrder for ZXY { const AXIS: [Axis; 3] = [Z,X,Y]; }
-pub enum ZYX {} impl DirectionOrder for ZYX { const AXIS: [Axis; 3] = [Z,Y,X]; }
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Direction { PX, PY, PZ, NX, NY, NZ }
+pub use Direction::*;
+impl Direction {
+	pub const fn axis(self) -> Axis { match self { PX | NX => X, PY | NY => Y, PZ | NZ => Z } }
+	pub const fn is_positive(self) -> bool { match self { PX | PY | PZ => true, NX | NY | NZ => false } }
+	pub const fn is_negative(self) -> bool { match self { NX | NY | NZ => true, PX | PY | PZ => false } }
+}
+
+
+pub trait AxisOrder { const AXIS: [Axis; 3]; }
+pub enum XYZ {} impl AxisOrder for XYZ { const AXIS: [Axis; 3] = [X,Y,Z]; }
+pub enum XZY {} impl AxisOrder for XZY { const AXIS: [Axis; 3] = [X,Z,Y]; }
+pub enum YXZ {} impl AxisOrder for YXZ { const AXIS: [Axis; 3] = [Y,X,Z]; }
+pub enum YZX {} impl AxisOrder for YZX { const AXIS: [Axis; 3] = [Y,Z,X]; }
+pub enum ZXY {} impl AxisOrder for ZXY { const AXIS: [Axis; 3] = [Z,X,Y]; }
+pub enum ZYX {} impl AxisOrder for ZYX { const AXIS: [Axis; 3] = [Z,Y,X]; }
 
 
 pub struct Vec3Range<T, O> {
@@ -92,7 +108,7 @@ pub struct Vec3Range<T, O> {
 	_order: PhantomData<O>
 }
 
-impl<T, O: DirectionOrder> Vec3Range<T, O> {
+impl<T, O: AxisOrder> Vec3Range<T, O> {
 	pub fn inclusive(start: Vec3<T>, end: Vec3<T>) -> Self
 	where
 		T: PrimInt
@@ -117,7 +133,7 @@ impl<T, O: DirectionOrder> Vec3Range<T, O> {
 	}
 }
 
-impl<T, O: DirectionOrder> Iterator for Vec3Range<T, O> where
+impl<T, O: AxisOrder> Iterator for Vec3Range<T, O> where
 	T: PrimInt + AddAssign + SubAssign
 {
 	type Item = Vec3<T>;

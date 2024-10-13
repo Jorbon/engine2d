@@ -319,16 +319,16 @@ impl Entity {
 		let h_inset = h - tile_pos.as_type::<f64>();
 		let l_inset = tile_pos.as_type::<f64>() + Vec3(1.0, 1.0, 1.0) - l;
 		
-		for (a, b, c) in [(Z, X, Y), (Y, X, Z), (X, Y, Z)] {
-			if h_inset[b] > SURFACE_MARGIN && l_inset[b] > SURFACE_MARGIN
-			&& h_inset[c] > SURFACE_MARGIN && l_inset[c] > SURFACE_MARGIN {
+		for a in [Z, Y, X] {
+			if h_inset[a.l()] > SURFACE_MARGIN && l_inset[a.l()] > SURFACE_MARGIN
+			&& h_inset[a.r()] > SURFACE_MARGIN && l_inset[a.r()] > SURFACE_MARGIN {
 				if h_inset[a].abs() < SURFACE_MARGIN {
 					self.position[a] = tile_pos[a] as f64 - self.size[a] * HIGH_CORNER[a];
-					normals.push(-Vec3::<f64>::unit(a));
+					normals.push(Vec3::<f64>::unit(a.n()));
 				}
 				if l_inset[a].abs() < SURFACE_MARGIN {
 					self.position[a] = (tile_pos[a] + 1) as f64 - self.size[a] * LOW_CORNER[a];
-					normals.push(Vec3::unit(a));
+					normals.push(Vec3::unit(a.p()));
 				}
 			}
 		}
@@ -341,12 +341,12 @@ impl Entity {
 			if self.velocity[a] < 0.0 {
 				let t = prel(l[a], l[a] + self.velocity[a], tile_pos[a] as f64 + 1.0);
 				if t > 0.0 && t <= max_t {
-					return Some((t, Vec3::unit(a)))
+					return Some((t, Vec3::unit(a.p())))
 				}
 			} else if self.velocity[a] > 0.0 {
 				let t = prel(h[a], h[a] + self.velocity[a], tile_pos[a] as f64);
 				if t > 0.0 && t <= max_t {
-					return Some((t, -Vec3::<f64>::unit(a)))
+					return Some((t, Vec3::<f64>::unit(a.n())))
 				}
 			}
 		}

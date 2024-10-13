@@ -1,19 +1,5 @@
 use crate::*;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum RampDirection {
-	North(NorthSouthAdjacent),
-	South(NorthSouthAdjacent),
-	East(EastWestAdjacent),
-	West(EastWestAdjacent),
-	Up(UpDownAdjacent),
-	Down(UpDownAdjacent),
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)] pub enum NorthSouthAdjacent { East, West, Up, Down }
-#[derive(Copy, Clone, Debug, Eq, PartialEq)] pub enum EastWestAdjacent { North, South, Up, Down }
-#[derive(Copy, Clone, Debug, Eq, PartialEq)] pub enum UpDownAdjacent { North, South, East, West }
-
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Material {

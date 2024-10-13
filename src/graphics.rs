@@ -43,5 +43,5 @@ pub struct ModelVertex {
 }
 glium::implement_vertex!(ModelVertex, position, normal, uv);
 
-pub type ModelIndex = u16;
+pub type ModelIndex = u32;
 

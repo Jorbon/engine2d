@@ -1,16 +1,21 @@
 use std::{fmt::Debug, ops::{Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign}};
 
 use glium::{uniforms::{AsUniformValue, UniformValue}, vertex::{Attribute, AttributeType}, Vertex, VertexFormat};
-use num_traits::{AsPrimitive, ConstOne, ConstZero, Float, Zero};
+use num_traits::{real::Real, AsPrimitive, ConstOne, ConstZero, Float, Zero};
 
-use super::{Axis::{self, *}, Modulo, Vec3};
+use super::{Axis::{self, *}, Direction::{self, *}, Modulo, Vec3};
 
 #[derive(Copy, Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct Vec2<T>(pub T, pub T);
 
+impl<T> ConstZero for Vec2<T> where
+	T: ConstZero
+{ const ZERO: Self = Self(T::ZERO, T::ZERO); }
+
 impl<T> Vec2<T> where T: ConstZero + ConstOne {
 	pub const X: Self = Self(T::ONE, T::ZERO);
 	pub const Y: Self = Self(T::ZERO, T::ONE);
+	pub const XY: Self = Self(T::ONE, T::ONE);
 }
 
 impl<T> Vec2<T> where {
@@ -22,7 +27,21 @@ impl<T> Vec2<T> where {
 		T: Copy
 	{ Self(c, c) }
 	
-	pub const fn unit(axis: Axis) -> Self
+	pub fn unit(direction: Direction) -> Self
+	where
+		T: ConstZero + ConstOne + Neg<Output = T>
+	{
+		match direction {
+			PX => Self::X,
+			PY => Self::Y,
+			PZ => Self::ZERO,
+			NX => -Self::X,
+			NY => -Self::Y,
+			NZ => Self::ZERO,
+		}
+	}
+	
+	pub const fn positive_unit(axis: Axis) -> Self
 	where
 		T: ConstZero + ConstOne
 	{
@@ -115,6 +134,11 @@ impl<T> Vec2<T> where {
 		T: Div<U>
 	{ Vec2(self.0 / v.0, self.1 / v.1) }
 	
+	pub fn abs(self) -> Self
+	where
+		T: Real
+	{ Self(self.0.abs(), self.1.abs() ) }
+	
 	pub fn vec3_xy(self) -> Vec3<T>
 	where
 		T: Default
@@ -138,6 +162,7 @@ impl<T> Vec2<T> where T: Float {
 	pub fn normalize_or_zero(self) -> Self { if self.is_zero() { Self::zero() } else { self.normalize() } }
 	pub fn floor(self) -> Self { Self(self.0.floor(), self.1.floor()) }
 	pub fn ceil(self) -> Self { Self(self.0.ceil(), self.1.ceil()) }
+	pub fn round(self) -> Self { Self(self.0.round(), self.1.round()) }
 	
 	pub fn floor_to<U>(self) -> Vec2<U>
 	where
@@ -150,6 +175,12 @@ impl<T> Vec2<T> where T: Float {
 		T: Copy + 'static + AsPrimitive<U>,
 		U: Copy + 'static
 	{ self.ceil().as_type::<U>() }
+	
+	pub fn round_to<U>(self) -> Vec2<U>
+	where
+		T: Copy + 'static + AsPrimitive<U>,
+		U: Copy + 'static
+	{ self.round().as_type::<U>() }
 }
 
 impl<T> Zero for Vec2<T> where
@@ -159,10 +190,6 @@ impl<T> Zero for Vec2<T> where
 	fn is_zero(&self) -> bool { self.0.is_zero() && self.1.is_zero() }
 	fn set_zero(&mut self) { *self = Self::zero() }
 }
-
-impl<T> ConstZero for Vec2<T> where
-	T: ConstZero
-{ const ZERO: Self = Self(T::ZERO, T::ZERO); }
 
 
 impl<T, U> Modulo<U> for Vec2<T> where

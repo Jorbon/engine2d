@@ -163,6 +163,9 @@ fn main() {
 								world.entities[0].velocity = Vec3(0.0, 0.0, 0.0);
 							}
 						}
+						VirtualKeyCode::P => if state.is_pressed() {
+							println!("{:?}", world.get_block(world.entities[0].position.floor_to()));
+						}
 						VirtualKeyCode::Escape => if state.is_pressed() {
 							*control_flow = ControlFlow::Exit;
 						}
@@ -188,7 +191,7 @@ fn main() {
 				world.unload_flagged();
 				
 				for pos in Vec3Range::<isize, ZYX>::inclusive((cell_position - Vec3(0.0, 0.0, 0.0)).floor_to().with_z(0), (cell_position + Vec3(1.0, 1.0, 0.0)).floor_to().with_z(0)) {
-					world.get_or_load(pos);
+					world.get_or_load_cell(pos);
 				}
 				
 				
@@ -290,14 +293,18 @@ fn main() {
 				// MARK: Debug noise renderer
 				// let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
 				
-				// let mut noise_data = vec![vec![0.0; window_width as usize]; window_height as usize];
-				// for y in 0..window_height as usize {
+				// let mut noise_data = vec![vec![(0.0, 0.0, 0.0); window_width as usize]; window_height as usize];
+				// // for y in 0..window_height as usize {
 				// 	for x in 0..window_width as usize {
-				// 		noise_data[window_height as usize - (y + 1)][x] = perlin_noise(Vec2(x as f64 / 100.0, y as f64 / 100.0), seed) as f32 + 0.5;
+				// 		let (h, mut s) = perlin_noise(Vec2(x as f64 / 100.0, 0.0 as f64 / 100.0), seed);
+				// 		s /= 100.0;
+				// 		noise_data[((h + 0.5) * window_height as f64) as usize][x] = (1.0, 0.0, 0.0);
+				// 		noise_data[((s.x() + 0.5) * window_height as f64) as usize][x] = (0.0, 1.0, 0.0);
+				// 		noise_data[((/*s.y() +*/ 0.5) * window_height as f64) as usize][x] = (0.0, 0.0, 1.0);
 				// 	}
-				// }
+				// // }
 				
-				// screen_texture = Texture2d::with_format(&display, noise_data, glium::texture::UncompressedFloatFormat::F32, MipmapsOption::NoMipmap).unwrap();
+				// screen_texture = Texture2d::with_format(&display, noise_data, glium::texture::UncompressedFloatFormat::F32F32F32, glium::texture::MipmapsOption::NoMipmap).unwrap();
 				
 				
 				// MARK: Post-processing
