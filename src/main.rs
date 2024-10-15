@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, f32::consts::PI};
 
 use glium::{draw_parameters::DepthClamp, framebuffer::MultiOutputFrameBuffer, glutin::{dpi::PhysicalSize, event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent}, event_loop::{ControlFlow, EventLoop}, window::{Icon, WindowBuilder}, ContextBuilder}, index::PrimitiveType, texture::{DepthTexture2d, Texture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, BackfaceCullingMode, Blend, BlendingFunction, Depth, DepthTest, Display, DrawParameters, IndexBuffer, LinearBlendingFactor, Surface, VertexBuffer};
 
@@ -91,6 +91,9 @@ fn main() {
 	let mut key_ctrl = false;
 	let mut key_space = false;
 	
+	let mut u = 0.0f32;
+	let mut v = 0.0f32;
+	
 	let mut previous_frame_time = std::time::Instant::now();
 	
 	
@@ -130,6 +133,7 @@ fn main() {
 						VirtualKeyCode::LShift | VirtualKeyCode::RShift => key_shift = state.is_pressed(),
 						VirtualKeyCode::LControl | VirtualKeyCode::RControl => key_ctrl = state.is_pressed(),
 						VirtualKeyCode::Space => key_space = state.is_pressed(),
+						
 						VirtualKeyCode::Up => if state.is_pressed() {
 							world.entities[0].velocity.1 -= 30.0;
 						}
@@ -142,12 +146,19 @@ fn main() {
 						VirtualKeyCode::Right => if state.is_pressed() {
 							world.entities[0].velocity.0 += 30.0;
 						}
+						
 						VirtualKeyCode::Minus => if state.is_pressed() {
 							tile_size /= 1.1;
 						}
 						VirtualKeyCode::Equals => if state.is_pressed() {
 							tile_size *= 1.1;
 						}
+						
+						VirtualKeyCode::I => if state.is_pressed() { v += 0.1; if v > PI { v = PI } }
+						VirtualKeyCode::K => if state.is_pressed() { v -= 0.1; if v < 0.0 { v = 0.0 } }
+						VirtualKeyCode::J => if state.is_pressed() { u += 0.1; }
+						VirtualKeyCode::L => if state.is_pressed() { u -= 0.1; }
+						
 						VirtualKeyCode::R => if state.is_pressed() {
 							if key_ctrl {
 								tilemap_program = load_shader_program(&display, "tilemap", "tilemap");
@@ -163,9 +174,11 @@ fn main() {
 								world.entities[0].velocity = Vec3(0.0, 0.0, 0.0);
 							}
 						}
+						
 						VirtualKeyCode::P => if state.is_pressed() {
 							println!("{:?}", world.get_block(world.entities[0].position.floor_to()));
 						}
+						
 						VirtualKeyCode::Escape => if state.is_pressed() {
 							*control_flow = ControlFlow::Exit;
 						}
@@ -208,6 +221,15 @@ fn main() {
 					entity.physics_step(&world.cells, dt);
 				}
 				
+				let view_matrix = Vec3(
+					Vec3(1.0, 0.0, 0.0),
+					Vec3(0.0, v.cos(), -v.sin()),
+					Vec3(0.0, v.sin(), v.cos()),
+				).matmul(Vec3(
+					Vec3(u.cos(), -u.sin(), 0.0),
+					Vec3(u.sin(), u.cos(), 0.0),
+					Vec3(0.0, 0.0, 1.0),
+				));
 				
 				
 				world.update_buffers(&display);
@@ -224,6 +246,7 @@ fn main() {
 						target.draw(vertex_buffer, index_buffer, &tilemap_program, &UniformsStorage::
 							 new("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))
 							.add("cell_position", (*location << CELL_SIZE_BITS).as_type::<f32>() - world.entities[0].position.as_type::<f32>())
+							.add("view_transform", view_matrix)
 							.add("tilemap_texture", Sampler(&tilemap_texture, SamplerBehavior {
 								wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
 								minify_filter: MinifySamplerFilter::Linear,
@@ -263,6 +286,7 @@ fn main() {
 						.add("texture_size", entity.size.xy().as_type::<f32>())
 						.add("render_position", world.entities[0].position.as_type::<f32>())
 						.add("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))
+						.add("view_transform", view_matrix)
 						.add("tex", Sampler(entity.current_sprite(), SamplerBehavior {
 							wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
 							minify_filter: MinifySamplerFilter::Linear,

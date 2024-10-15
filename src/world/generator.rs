@@ -1,6 +1,3 @@
-
-use num_traits::ConstZero;
-
 use crate::*;
 
 
@@ -69,13 +66,20 @@ pub fn generate_cell(tiles: &mut CellTiles, location: Vec3<isize>, gen: &Generat
 		];
 		
 		for z in 0..height {
-			tiles[pos.with_z(z)] = Block(materials[z]);
+			tiles[pos.with_z(z)] = Tile::full(materials[z]);
 		}
+		
 		let direction = (slope.with_z(-1.0) * -8.0).round_to();
-		tiles[pos.with_z(height)] = Ramp(materials[height], encode_ramp_direction(direction), (direction.x() + direction.y() + direction.z()) / 2);
-		// for z in height..gen.center.round() as usize {
-		// 	tiles[pos.with_z(z)] = Water;
-		// }
+		tiles[pos.with_z(height)] = Tile {
+			material: materials[height],
+			fluid: if height < gen.center.round() as usize {Water} else {Air},
+			level: (direction.x() + direction.y() + direction.z()) / 2,
+			direction,
+		};
+		
+		for z in (height + 1)..gen.center.round() as usize {
+			tiles[pos.with_z(z)] = Tile::empty(Water);
+		}
 	}
 }
 

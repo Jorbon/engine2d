@@ -13,15 +13,14 @@ pub enum Material {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Tile {
+pub enum Fluid {
 	Air,
 	Water,
-	Block(Material),
-	Ramp(Material, u16, i8),
 }
 
+use num_traits::Zero;
 pub use Material::*;
-pub use Tile::*;
+pub use Fluid::*;
 
 impl Material {
 	pub fn get_uv(&self) -> Vec2<u16> {
@@ -37,24 +36,53 @@ impl Material {
 	}
 }
 
-pub fn decode_ramp_direction(d: u16) -> Vec3<i8> {
-	Vec3(
-		(((d & 0b0000000000011111) << 3) as i8) >> 3,
-		(((d & 0b0000001111100000) >> 2) as i8) >> 3,
-		(((d & 0b1111110000000000) >> 8) as i8) >> 2,
-	)
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct Tile {
+	pub material: Material,
+	pub fluid: Fluid,
+	pub level: i8,
+	pub direction: Vec3<i8>,
 }
 
-pub fn encode_ramp_direction(d: Vec3<i8>) -> u16 {
-	((d.x() & 0b00011111) as u16) | (((d.y() & 0b00011111) as u16) << 5) | (((d.z() & 0b00111111) as u16) << 10)
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum TileState { Empty, Full, Partial }
+
+impl Tile {
+	pub fn full(material: Material) -> Self {
+		Self {
+			material,
+			fluid: Air,
+			level: 1,
+			direction: Vec3::ZERO,
+		}
+	}
+	pub fn empty(fluid: Fluid) -> Self {
+		Self {
+			material: Grass,
+			fluid,
+			level: 0,
+			direction: Vec3::ZERO,
+		}
+	}
+	pub fn state(&self) -> TileState {
+		if self.direction.is_zero() {
+			if self.level == 0 {TileState::Empty} else {TileState::Full}
+		} else {TileState::Partial}
+	}
 }
 
 
-
-
-
-
-
+impl Default for Tile {
+	fn default() -> Self {
+		Self {
+			material: Grass,
+			fluid: Air,
+			level: 0,
+			direction: Vec3::ZERO,
+		}
+	}
+}
 
 
 

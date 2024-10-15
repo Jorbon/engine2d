@@ -90,6 +90,20 @@ impl Direction {
 	pub const fn is_negative(self) -> bool { match self { NX | NY | NZ => true, PX | PY | PZ => false } }
 }
 
+impl std::ops::Neg for Direction {
+	type Output = Self;
+	fn neg(self) -> Self::Output {
+		match self {
+			PX => NX,
+			PY => NY,
+			PZ => NZ,
+			NX => PX,
+			NY => PY,
+			NZ => PZ,
+		}
+	}
+}
+
 
 pub trait AxisOrder { const AXIS: [Axis; 3]; }
 pub enum XYZ {} impl AxisOrder for XYZ { const AXIS: [Axis; 3] = [X,Y,Z]; }

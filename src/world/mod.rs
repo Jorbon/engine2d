@@ -89,7 +89,7 @@ impl World {
 		if self.cells.contains_key(&location) { return }
 		
 		let mut tiles = {
-			let ptr = Box::into_raw(vec![[[Air; CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT].into_boxed_slice()) as *mut CellTiles;
+			let ptr = Box::into_raw(vec![[[Tile::default(); CELL_WIDTH]; CELL_WIDTH]; CELL_HEIGHT].into_boxed_slice()) as *mut CellTiles;
 			unsafe { Box::from_raw(ptr) }
 		};
 		
@@ -120,9 +120,8 @@ impl World {
 		let cell = self.get_or_load_cell(cell_location.with_z(0));
 		
 		for z in (0..CELL_HEIGHT).rev() {
-			match cell.tiles[pos_in_cell.with_z(z)] {
-				Air => continue,
-				_ => return position.with_z(z as f64 + 1.0)
+			if cell.tiles[pos_in_cell.with_z(z)] != Tile::empty(Air) {
+				return position.with_z(z as f64 + 1.0)
 			}
 		}
 		

@@ -1,5 +1,4 @@
 use std::{collections::HashMap, path::Path};
-
 use glium::{texture::SrgbTexture2d, Display};
 
 use crate::*;
@@ -129,28 +128,25 @@ impl Entity {
 		for tile_pos in Vec3Range::<isize, ZYX>::inclusive((l - Vec3::all(SURFACE_MARGIN)).floor_to(), (h + Vec3::all(SURFACE_MARGIN)).floor_to()) {
 			let cell_pos = tile_pos >> CELL_SIZE_BITS;
 			if let Some(cell) = cells.get(&cell_pos) {
-				match cell.tiles[(tile_pos & CELL_MASK).as_type()] {
-					Air | Water => (),
-					Block(_material) => {
-						self.block_touching(&mut normals, tile_pos, l, h);
-					}
-					Ramp(_material, direction, level) => {
-						let direction = decode_ramp_direction(direction);
+				let tile = cell.tiles[(tile_pos & CELL_MASK).as_type()];
+				
+				match tile.state() {
+					TileState::Empty => (),
+					TileState::Full => self.block_touching(&mut normals, tile_pos, l, h),
+					TileState::Partial => {
+						let near_corner = Vec3::by_axis(|a| if tile.direction[a] >= 0 {l[a]} else {h[a]});
 						
-						let near_corner = Vec3::by_axis(|a| if direction[a] >= 0 {l[a]} else {h[a]});
-						
-						let ramp_s = (tile_pos.dot(direction.as_type::<isize>()) + level as isize) as f64;
-						let near_corner_s = near_corner.dot(direction.as_type::<f64>());
-						if (near_corner_s - ramp_s).abs() < SURFACE_MARGIN * direction.as_type::<f64>().length()
+						let ramp_s = (tile_pos.dot(tile.direction.as_type::<isize>()) + tile.level as isize) as f64;
+						let near_corner_s = near_corner.dot(tile.direction.as_type::<f64>());
+						if (near_corner_s - ramp_s).abs() < SURFACE_MARGIN * tile.direction.as_type::<f64>().length()
 						&& near_corner.x() >= tile_pos.x() as f64 && near_corner.x() <= tile_pos.x() as f64 + 1.0
 						&& near_corner.y() >= tile_pos.y() as f64 && near_corner.y() <= tile_pos.y() as f64 + 1.0
 						&& near_corner.z() >= tile_pos.z() as f64 && near_corner.z() <= tile_pos.z() as f64 + 1.0 {
-							self.position += direction.as_type::<f64>() * (ramp_s - near_corner_s) / direction.as_type::<f64>().length_squared();
-							normals.push(direction.as_type::<f64>().normalize());
+							self.position += tile.direction.as_type::<f64>() * (ramp_s - near_corner_s) / tile.direction.as_type::<f64>().length_squared();
+							normals.push(tile.direction.as_type::<f64>().normalize());
 						} else if near_corner_s < ramp_s {
 							self.block_touching(&mut normals, tile_pos, l, h);
 						}
-						
 					}
 				}
 			}
@@ -263,33 +259,29 @@ impl Entity {
 	pub fn test_collision(&self, cells: &HashMap<Vec3<isize>, Cell>, tile_pos: Vec3<isize>, max_t: f64) -> Option<(f64, Vec3<f64>)> {
 		let cell_pos = tile_pos >> CELL_SIZE_BITS;
 		if let Some(cell) = cells.get(&cell_pos) {
-			match cell.tiles[(tile_pos & CELL_MASK).as_type()] {
-				Air | Water => None,
-				Block(_material) => {
-					self.block_collision(tile_pos, max_t)
-				}
-				Ramp(_material, direction, level) => {
-					let direction = decode_ramp_direction(direction);
+			let tile = cell.tiles[(tile_pos & CELL_MASK).as_type()];
+			
+			match tile.state() {
+				TileState::Empty => None,
+				TileState::Full => self.block_collision(tile_pos, max_t),
+				TileState::Partial => {
 					let l = self.position + self.size.scale(LOW_CORNER);
 					let h = self.position + self.size.scale(HIGH_CORNER);
 					
-					if self.velocity.dot(direction.as_type::<f64>()) < -SURFACE_MARGIN {
-						let (positive_sum, negative_sum) = {
-							let mut positive_sum = 0;
-							let mut negative_sum = 0;
-							direction.map(|v| if v > 0 { positive_sum += v; } else { negative_sum += v; });
-							(positive_sum, negative_sum)
-						};
+					if self.velocity.dot(tile.direction.as_type::<f64>()) < -SURFACE_MARGIN {
+						let mut positive_sum = 0;
+						let mut negative_sum = 0;
+						tile.direction.map(|v| if v >= 0 { positive_sum += v; } else { negative_sum += v; });
 						
-						if level <= negative_sum { return None }
-						if level >= positive_sum { return self.block_collision(tile_pos, max_t) }
+						if tile.level <= negative_sum { return None }
+						if tile.level >= positive_sum { return self.block_collision(tile_pos, max_t) }
 						
 						
 						
-						let near_corner = Vec3::by_axis(|a| if direction[a] >= 0 {l[a]} else {h[a]});
-						let ramp_s = (tile_pos.dot(direction.as_type::<isize>()) + level as isize) as f64;
-						let current_s = near_corner.dot(direction.as_type::<f64>());
-						let next_s = (near_corner + self.velocity).dot(direction.as_type::<f64>());
+						let near_corner = Vec3::by_axis(|a| if tile.direction[a] >= 0 {l[a]} else {h[a]});
+						let ramp_s = (tile_pos.dot(tile.direction.as_type::<isize>()) + tile.level as isize) as f64;
+						let current_s = near_corner.dot(tile.direction.as_type::<f64>());
+						let next_s = (near_corner + self.velocity).dot(tile.direction.as_type::<f64>());
 						let t = prel(current_s, next_s, ramp_s);
 						
 						let near_corner_pos = near_corner + self.velocity * t;
@@ -298,7 +290,7 @@ impl Entity {
 						&& near_corner_pos.y() >= tile_pos.y() as f64 && near_corner_pos.y() <= tile_pos.y() as f64 + 1.0
 						&& near_corner_pos.z() >= tile_pos.z() as f64 && near_corner_pos.z() <= tile_pos.z() as f64 + 1.0 {
 							if t <= max_t {
-								return Some((t, direction.as_type::<f64>().normalize()))
+								return Some((t, tile.direction.as_type::<f64>().normalize()))
 							} else {
 								return None
 							}

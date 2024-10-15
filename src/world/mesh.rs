@@ -1,5 +1,3 @@
-use num_traits::ConstZero;
-
 use crate::*;
 
 
@@ -65,16 +63,15 @@ fn add_face(vertices: &mut Vec<ModelVertex>, indices: &mut Vec<ModelIndex>, pos:
 	}).collect());
 }
 
-fn adjacent_tile_has_full_face(d: Direction, adjacent_tile: Tile) -> bool {
-	match adjacent_tile {
-		Block(_) => true,
-		Air | Water => false,
-		Ramp(_material, direction, level) => {
-			let direction = decode_ramp_direction(direction);
+fn tile_has_full_face(d: Direction, tile: Tile) -> bool {
+	match tile.state() {
+		TileState::Empty => false,
+		TileState::Full => true,
+		TileState::Partial => {
 			let a = d.axis();
 			match d.is_positive() {
-				true => direction[a] > 0 && level >= direction[a.l()].max(0) + direction[a.r()].max(0),
-				false => direction[a] < 0 && level >= direction[a] + direction[a.l()] + direction[a.r()],
+				true => tile.direction[a] < 0 && tile.level >= tile.direction[a] + tile.direction[a.l()] + tile.direction[a.r()],
+				false => tile.direction[a] > 0 && tile.level >= tile.direction[a.l()].max(0) + tile.direction[a.r()].max(0),
 			}
 		}
 	}
@@ -84,11 +81,13 @@ fn adjacent_tile_has_full_face(d: Direction, adjacent_tile: Tile) -> bool {
 
 pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut HashMap<Vec3<isize>, Cell>) {
 	for pos in Vec3Range::<usize, ZYX>::exclusive(Vec3::ZERO, CELL_SIZE.as_type()) {
-		match new_cell.tiles[pos] {
-			Air | Water => (),
-			Block(material) => {
+		let tile = new_cell.tiles[pos];
+		
+		match tile.state() {
+			TileState::Empty => (),
+			TileState::Full => {
 				for d in [PX, PY, PZ, NX, NY, NZ] {
-					if !adjacent_tile_has_full_face(d,
+					if !tile_has_full_face(-d,
 						if match d.is_positive() {
 							true => pos[d.axis()] < CELL_SIZE[d.axis()] as usize - 1,
 							false => pos[d.axis()] > 0,
@@ -98,21 +97,20 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 							other_cell.tiles[pos.with(d.axis(), if d.is_positive() {0} else {CELL_SIZE[d.axis()] as usize - 1})]
 						} else { continue }
 					) {
-						add_face(&mut new_cell.vertices, &mut new_cell.indices, pos, material, d);
+						add_face(&mut new_cell.vertices, &mut new_cell.indices, pos, tile.material, d);
 					}
 				}
 			}
-			Ramp(material, direction, level) => {
-				let direction = decode_ramp_direction(direction);
+			TileState::Partial => {
 				
 				let (mut min_level, mut max_level) = (0, 0);
-				direction.map(|v| if v > 0 { max_level += v } else { min_level += v });
+				tile.direction.map(|v| if v > 0 { max_level += v } else { min_level += v });
 				
-				if level <= min_level { println!("Empty ramp"); continue }
-				if level >= max_level { println!("Full ramp"); continue }
+				if tile.level <= min_level { println!("Empty ramp"); continue }
+				if tile.level >= max_level { println!("Full ramp"); continue }
 				
-				let direction_abs = direction.abs();
-				let level_abs = level + (-direction.x()).max(0) + (-direction.y()).max(0) + (-direction.z()).max(0);
+				let direction_abs = tile.direction.abs();
+				let level_abs = tile.level + (-tile.direction.x()).max(0) + (-tile.direction.y()).max(0) + (-tile.direction.z()).max(0);
 				let mut v = vec![];
 				for a in [X, Y, Z] {
 					if level_abs < direction_abs[a] {
@@ -131,8 +129,8 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 				}
 				
 				let pos = pos.as_type::<f32>();
-				let normal = direction.as_type::<f32>().normalize();
-				let uv_corner = material.get_uv().as_type::<f32>();
+				let normal = tile.direction.as_type::<f32>().normalize();
+				let uv_corner = tile.material.get_uv().as_type::<f32>();
 				
 				let index_base = new_cell.vertices.len() as ModelIndex;
 				let index_iter = match v.len() {
@@ -145,7 +143,7 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 				
 				new_cell.indices.append(&mut match {
 					let mut reverse = true;
-					direction.map(|v| if v < 0 { reverse = !reverse });
+					tile.direction.map(|v| if v < 0 { reverse = !reverse });
 					reverse
 				} {
 					false => index_iter.map(|i| i + index_base).collect(),
@@ -153,7 +151,7 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 				});
 				
 				for vertex in v {
-					let vertex = Vec3::by_axis(|a| if direction[a] >= 0 {vertex[a]} else {1.0 - vertex[a]});
+					let vertex = Vec3::by_axis(|a| if tile.direction[a] >= 0 {vertex[a]} else {1.0 - vertex[a]});
 					new_cell.vertices.push(ModelVertex {
 						position: pos + vertex,
 						normal,
@@ -173,10 +171,14 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 				let mut other_tile_pos = tile_pos.with(d.axis(), CELL_SIZE[d.axis()] as usize - 1);
 				if d.is_negative() { (this_tile_pos, other_tile_pos) = (other_tile_pos, this_tile_pos); }
 				
-				match other_cell.tiles[other_tile_pos] {
-					Air | Water | Ramp(..) => (),
-					Block(material) => if !adjacent_tile_has_full_face(d, new_cell.tiles[this_tile_pos]) {
-						add_face(&mut other_cell.vertices, &mut other_cell.indices, other_tile_pos, material, d);
+				let tile = other_cell.tiles[other_tile_pos];
+				match tile.state() {
+					TileState::Empty => (),
+					TileState::Full => if !tile_has_full_face(-d, new_cell.tiles[this_tile_pos]) {
+						add_face(&mut other_cell.vertices, &mut other_cell.indices, other_tile_pos, tile.material, d);
+					}
+					TileState::Partial => {
+						// todo!()
 					}
 				}
 			}

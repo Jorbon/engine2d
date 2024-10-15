@@ -12,6 +12,10 @@ impl<T> ConstZero for Vec3<T> where
 	T: ConstZero
 { const ZERO: Self = Self(T::ZERO, T::ZERO, T::ZERO); }
 
+impl<T> Vec3<T> where
+	T: ConstZero
+{ pub const ZERO: Self = <Self as ConstZero>::ZERO; }
+
 impl<T> Vec3<T> where T: ConstZero + ConstOne {
 	pub const X: Self = Self(T::ONE, T::ZERO, T::ZERO);
 	pub const Y: Self = Self(T::ZERO, T::ONE, T::ZERO);
@@ -218,12 +222,37 @@ impl<T> Zero for Vec3<T> where
 	fn set_zero(&mut self) { *self = Self::zero() }
 }
 
-
-
 impl<T, U> Modulo<U> for Vec3<T> where
 	T: Modulo<U>,
 	U: Copy
 { fn modulo(self, rhs: U) -> Self { Vec3(self.0.modulo(rhs), self.1.modulo(rhs), self.2.modulo(rhs)) } }
+
+
+
+impl<T> Vec3<Vec3<T>> {
+	pub fn matmul<U>(self, rhs: Vec3<Vec3<U>>) -> Vec3<Vec3<<T as Mul<U>>::Output>>
+	where
+		T: Copy + Mul<U>,
+		U: Copy,
+		<T as Mul<U>>::Output: Add<Output = <T as Mul<U>>::Output>
+	{
+		Vec3(
+			Vec3(
+				self.0.0 * rhs.0.0 + self.1.0 * rhs.0.1 + self.2.0 * rhs.0.2,
+				self.0.1 * rhs.0.0 + self.1.1 * rhs.0.1 + self.2.1 * rhs.0.2,
+				self.0.2 * rhs.0.0 + self.1.2 * rhs.0.1 + self.2.2 * rhs.0.2,
+			), Vec3(
+				self.0.0 * rhs.1.0 + self.1.0 * rhs.1.1 + self.2.0 * rhs.1.2,
+				self.0.1 * rhs.1.0 + self.1.1 * rhs.1.1 + self.2.1 * rhs.1.2,
+				self.0.2 * rhs.1.0 + self.1.2 * rhs.1.1 + self.2.2 * rhs.1.2,
+			), Vec3(
+				self.0.0 * rhs.2.0 + self.1.0 * rhs.2.1 + self.2.0 * rhs.2.2,
+				self.0.1 * rhs.2.0 + self.1.1 * rhs.2.1 + self.2.1 * rhs.2.2,
+				self.0.2 * rhs.2.0 + self.1.2 * rhs.2.1 + self.2.2 * rhs.2.2,
+			)
+		)
+	}
+}
 
 
 
@@ -250,6 +279,8 @@ impl AsUniformValue for Vec3<i32> { fn as_uniform_value(&self) -> UniformValue<'
 impl AsUniformValue for Vec3<i64> { fn as_uniform_value(&self) -> UniformValue<'_> { UniformValue::Int64Vec3([self.0, self.1, self.2]) } }
 impl AsUniformValue for Vec3<u32> { fn as_uniform_value(&self) -> UniformValue<'_> { UniformValue::UnsignedIntVec3([self.0, self.1, self.2]) } }
 impl AsUniformValue for Vec3<u64> { fn as_uniform_value(&self) -> UniformValue<'_> { UniformValue::UnsignedInt64Vec3([self.0, self.1, self.2]) } }
+
+impl AsUniformValue for Vec3<Vec3<f32>> { fn as_uniform_value(&self) -> UniformValue<'_> { UniformValue::Mat3([[self.0.0, self.0.1, self.0.2], [self.1.0, self.1.1, self.1.2], [self.2.0, self.2.1, self.2.2]]) } }
 
 
 

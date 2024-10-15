@@ -12,6 +12,10 @@ impl<T> ConstZero for Vec2<T> where
 	T: ConstZero
 { const ZERO: Self = Self(T::ZERO, T::ZERO); }
 
+impl<T> Vec2<T> where
+	T: ConstZero
+{ pub const ZERO: Self = <Self as ConstZero>::ZERO; }
+
 impl<T> Vec2<T> where T: ConstZero + ConstOne {
 	pub const X: Self = Self(T::ONE, T::ZERO);
 	pub const Y: Self = Self(T::ZERO, T::ONE);
