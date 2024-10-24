@@ -25,7 +25,6 @@ pub fn perlin_noise(position: Vec2<f64>, seed: u64) -> (f64, Vec2<f64>) {
 	let nx2 = nx*nx;
 	let ny2 = ny*ny;
 	
-	
 	let distance_ll = (1.0 - (px2 + py2)).max(0.0); let distance_ll2 = distance_ll * distance_ll; let distance_ll4 = distance_ll2 * distance_ll2;
 	let distance_hl = (1.0 - (nx2 + py2)).max(0.0); let distance_hl2 = distance_hl * distance_hl; let distance_hl4 = distance_hl2 * distance_hl2;
 	let distance_lh = (1.0 - (px2 + ny2)).max(0.0); let distance_lh2 = distance_lh * distance_lh; let distance_lh4 = distance_lh2 * distance_lh2;

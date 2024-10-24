@@ -5,8 +5,14 @@ use num_traits::{AsPrimitive, ConstOne, ConstZero, Float, Signed, Zero};
 
 use super::{Axis::{self, *}, Direction::{self, *}, Modulo, Vec2};
 
-#[derive(Copy, Clone, Default, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Vec3<T>(pub T, pub T, pub T);
+
+impl<T: Debug> Debug for Vec3<T> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_tuple("Vec3").field(&self.0).field(&self.1).field(&self.2).finish()
+	}
+}
 
 impl<T> ConstZero for Vec3<T> where
 	T: ConstZero
@@ -104,6 +110,10 @@ impl<T> Vec3<T> {
 			Z => self.with_z(v),
 		}
 	}
+	
+	pub fn with_xy(self, v: Vec2<T>) -> Self { Self(v.0, v.1, self.2) }
+	pub fn with_xz(self, v: Vec2<T>) -> Self { Self(v.0, v.1, self.2) }
+	pub fn with_yz(self, v: Vec2<T>) -> Self { Self(v.0, v.1, self.2) }
 	
 	pub fn add_x<U>(self, v: U) -> Self where T: Add<U, Output = T> { Self(self.0 + v, self.1, self.2) }
 	pub fn add_y<U>(self, v: U) -> Self where T: Add<U, Output = T> { Self(self.0, self.1 + v, self.2) }

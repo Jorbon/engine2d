@@ -70,6 +70,17 @@ impl Tile {
 			if self.level == 0 {TileState::Empty} else {TileState::Full}
 		} else {TileState::Partial}
 	}
+	pub fn is_empty(&self) -> bool {
+		self.direction.is_zero() && self.level == 0
+	}
+	pub fn is_full(&self) -> bool {
+		self.direction.is_zero() && self.level != 0
+	}
+	
+	 // Invalid for empty tiles
+	pub fn includes_corner(&self, corner: Vec3<i8>) -> bool {
+		self.direction.dot(corner) <= self.level
+	}
 }
 
 

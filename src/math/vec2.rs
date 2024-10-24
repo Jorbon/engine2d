@@ -5,8 +5,14 @@ use num_traits::{AsPrimitive, ConstOne, ConstZero, Float, Signed, Zero};
 
 use super::{Axis::{self, *}, Direction::{self, *}, Modulo, Vec3};
 
-#[derive(Copy, Clone, Default, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Vec2<T>(pub T, pub T);
+
+impl<T: Debug> Debug for Vec2<T> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_tuple("Vec2").field(&self.0).field(&self.1).finish()
+	}
+}
 
 impl<T> ConstZero for Vec2<T> where
 	T: ConstZero

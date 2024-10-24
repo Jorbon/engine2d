@@ -36,7 +36,7 @@
             ],
             "group": {
                 "kind": "test",
-                "isDefault": true
+                "isDefault": false
             },
             "label": "check"
         },

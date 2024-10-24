@@ -1,3 +1,4 @@
+
 [package]
 name = "engine2d"
 version = "0.1.0"
@@ -7,6 +8,6 @@ edition = "2021"
 
 [dependencies]
 glium = "0.32.1"
-image = "*"
+image = "0.25.3"
 num-traits = "*"
 

@@ -11,6 +11,7 @@ const float TEXTURE_DIMENSIONS = 16;
 
 void main() {
 	vec3 c = texture(tilemap_texture, uv_ / TEXTURE_DIMENSIONS).rgb;
-	color = vec4(c * dot(normal_, normalize(vec3(2, 1, 3))), 1.0);
+	float shade = max(dot(normal_, normalize(vec3(2, 1, 3))), 0.4);
+	color = vec4(c * shade, 1.0);
 	data = vec4(0, 0, 0, 0);
 }
