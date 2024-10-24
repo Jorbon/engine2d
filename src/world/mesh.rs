@@ -14,7 +14,7 @@ fn uv_unbleed(uv: Vec2<f32>) -> Vec2<f32> {
 	(uv - Vec2(0.5, 0.5)) * (1.0 - UV_MARGIN) + Vec2(0.5, 0.5)
 }
 
-fn uv_to_mesh<T: Copy + num_traits::Zero + num_traits::One + std::ops::Sub<T, Output = T>>(uv: Vec2<T>, d: Direction) -> Vec3<T> {
+fn uv_to_face_mesh<T: Copy + num_traits::Zero + num_traits::One + std::ops::Sub<T, Output = T>>(uv: Vec2<T>, d: Direction) -> Vec3<T> {
 	match d {
 		PX => Vec3(T::one(), T::one() - uv.x(), T::one() - uv.y()),
 		NX => Vec3(T::zero(), uv.x(), T::one() - uv.y()),
@@ -22,6 +22,17 @@ fn uv_to_mesh<T: Copy + num_traits::Zero + num_traits::One + std::ops::Sub<T, Ou
 		NY => Vec3(T::one() - uv.x(), T::zero(), T::one() - uv.y()),
 		PZ => Vec3(uv.x(), uv.y(), T::one()),
 		NZ => Vec3(uv.x(), T::one() - uv.y(), T::zero()),
+	}
+}
+
+fn face_mesh_to_uv<T: Copy + num_traits::One + std::ops::Sub<T, Output = T>>(pos: Vec3<T>, d: Direction) -> Vec2<T> {
+	match d {
+		PX => Vec2(T::one() - pos.y(), T::one() - pos.z()),
+		NX => Vec2(pos.y(), T::one() - pos.z()),
+		PY => Vec2(pos.x(), T::one() - pos.z()),
+		NY => Vec2(T::one() - pos.x(), T::one() - pos.z()),
+		PZ => Vec2(pos.x(), pos.y()),
+		NZ => Vec2(pos.x(), T::one() - pos.y()),
 	}
 }
 
@@ -35,7 +46,7 @@ fn add_face(vertices: &mut Vec<ModelVertex>, indices: &mut Vec<ModelIndex>, pos:
 	
 	let mut v = vec![];
 	
-	let s = FACE_UVS.map(|uv| tile.direction.dot(uv_to_mesh(uv, d)));
+	let s = FACE_UVS.map(|uv| tile.direction.dot(uv_to_face_mesh(uv, d)));
 	
 	for (i, j) in [(0, 1), (1, 2), (2, 3), (3, 0)] {
 		if s[i] <= tile.level {
@@ -58,7 +69,7 @@ fn add_face(vertices: &mut Vec<ModelVertex>, indices: &mut Vec<ModelIndex>, pos:
 	indices.append(&mut index_iter.map(|i| i + index_base).collect());
 	
 	vertices.append(&mut v.iter().map(|uv| ModelVertex {
-		position: pos + uv_to_mesh(*uv, d),
+		position: pos + uv_to_face_mesh(*uv, d),
 		normal: Vec3::<f32>::unit(d),
 		uv: uv_corner + uv_unbleed(*uv),
 	}).collect());
@@ -71,7 +82,7 @@ fn tile_has_full_face(d: Direction, tile: Tile) -> bool {
 		TileState::Full => true,
 		TileState::Partial => {
 			for uv in FACE_UVS {
-				if !tile.includes_corner(uv_to_mesh(uv, d)) { return false }
+				if !tile.includes_corner(uv_to_face_mesh(uv, d)) { return false }
 			}
 			true
 		}
@@ -150,12 +161,14 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 				true => index_iter.rev().map(|i| i + index_base).collect(),
 			});
 			
+			let uv_direction = *[PX, PY, PZ, NX, NY, NZ].iter().map(|d| (d, tile.direction.dot(Vec3::<i8>::unit(*d)))).max_by(|a, b| a.1.cmp(&b.1)).unwrap().0;
+			
 			for vertex in v {
 				let vertex = Vec3::by_axis(|a| if tile.direction[a] >= 0 {vertex[a]} else {1.0 - vertex[a]});
 				new_cell.vertices.push(ModelVertex {
 					position: pos + vertex,
 					normal: tile.direction.as_type::<f32>().normalize(),
-					uv: uv_corner + uv_unbleed(vertex.xy()),
+					uv: uv_corner + uv_unbleed(face_mesh_to_uv(vertex, uv_direction)),
 				});
 			}
 		}
