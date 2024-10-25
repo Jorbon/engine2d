@@ -4,6 +4,7 @@ in vec2 screen_position;
 out vec4 color;
 
 uniform float aspect_ratio;
+uniform float tile_depth_inverse;
 uniform sampler2D screen_texture;
 uniform sampler2D data_texture;
 uniform sampler2D depth_texture;
@@ -30,8 +31,8 @@ void main() {
 	
 	float shade = 0.0;
 	for (int i = 0; i < 12; i++) {
-		shade += clamp(texture(depth_texture, screen_position + kernel[i].xy * 0.0015 * vec2(1.0, aspect_ratio)).x - z, 0.0, 1.0) * kernel[i].z;
+		shade += clamp(texture(depth_texture, screen_position + kernel[i].xy * 0.0015 * vec2(1.0, aspect_ratio)).x - z, 0.0, 0.2) * kernel[i].z;
 	}
 	
-	color = vec4(c.rgb * (1.0 - shade * 7.0), c.a);
+	color = vec4(c.rgb * (1.0 - shade * tile_depth_inverse * 0.25), c.a);
 }

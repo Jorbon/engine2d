@@ -65,7 +65,7 @@ fn main() {
 	let mut aspect_ratio = window_width as f32 / window_height as f32;
 	
 	let mut tile_size = 1.0/40.0;
-	let tile_depth = 1.0/32.0;
+	let tile_depth = 1.0/128.0;
 	
 	let mut screen_texture = Texture2d::empty(&display, window_width, window_height).unwrap();
 	let mut data_texture = Texture2d::empty(&display, window_width, window_height).unwrap();
@@ -87,12 +87,17 @@ fn main() {
 	let mut key_s = false;
 	let mut key_d = false;
 	
+	let mut key_i = false;
+	let mut key_j = false;
+	let mut key_k = false;
+	let mut key_l = false;
+	
 	let mut key_shift = false;
 	let mut key_ctrl = false;
 	let mut key_space = false;
 	
 	let mut u = 0.0f32;
-	let mut v = 0.0f32;
+	let mut v = PI / 3.0;
 	
 	let mut previous_frame_time = std::time::Instant::now();
 	
@@ -154,10 +159,10 @@ fn main() {
 							tile_size *= 1.1;
 						}
 						
-						VirtualKeyCode::I => if state.is_pressed() { v += 0.1; if v > PI { v = PI } }
-						VirtualKeyCode::K => if state.is_pressed() { v -= 0.1; if v < 0.0 { v = 0.0 } }
-						VirtualKeyCode::J => if state.is_pressed() { u += 0.1; }
-						VirtualKeyCode::L => if state.is_pressed() { u -= 0.1; }
+						VirtualKeyCode::I => key_i = state.is_pressed(),
+						VirtualKeyCode::K => key_k = state.is_pressed(),
+						VirtualKeyCode::J => key_j = state.is_pressed(),
+						VirtualKeyCode::L => key_l = state.is_pressed(),
 						
 						VirtualKeyCode::R => if state.is_pressed() {
 							if key_ctrl {
@@ -208,6 +213,22 @@ fn main() {
 				}
 				
 				
+				if key_i { v += 0.5*PI * dt as f32; if v > 0.5*PI { v = 0.5*PI } }
+				if key_k { v -= 0.5*PI * dt as f32; if v < -0.5*PI { v = -0.5*PI } }
+				if key_j { u += 0.5*PI * dt as f32; }
+				if key_l { u -= 0.5*PI * dt as f32; }
+				
+				let view_matrix = Vec3(
+					Vec3(1.0, 0.0, 0.0),
+					Vec3(0.0, v.cos(), -v.sin()),
+					Vec3(0.0, v.sin(), v.cos()),
+				).matmul(Vec3(
+					Vec3(u.cos(), -u.sin(), 0.0),
+					Vec3(u.sin(), u.cos(), 0.0),
+					Vec3(0.0, 0.0, 1.0),
+				));
+				
+				
 				let mut dp = Vec3(0.0, 0.0, 0.0f64);
 				if key_w { dp.1 -= 1.0; }
 				if key_s { dp.1 += 1.0; }
@@ -221,15 +242,8 @@ fn main() {
 					entity.physics_step(&world.cells, dt);
 				}
 				
-				let view_matrix = Vec3(
-					Vec3(1.0, 0.0, 0.0),
-					Vec3(0.0, v.cos(), -v.sin()),
-					Vec3(0.0, v.sin(), v.cos()),
-				).matmul(Vec3(
-					Vec3(u.cos(), -u.sin(), 0.0),
-					Vec3(u.sin(), u.cos(), 0.0),
-					Vec3(0.0, 0.0, 1.0),
-				));
+				
+				
 				
 				
 				world.update_buffers(&display);
@@ -249,7 +263,7 @@ fn main() {
 							.add("view_transform", view_matrix)
 							.add("tilemap_texture", Sampler(&tilemap_texture, SamplerBehavior {
 								wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
-								minify_filter: MinifySamplerFilter::Linear,
+								minify_filter: MinifySamplerFilter::Nearest,
 								magnify_filter: MagnifySamplerFilter::Nearest,
 								depth_texture_comparison: None,
 								max_anisotropy: 1,
@@ -335,6 +349,7 @@ fn main() {
 				let mut display_target = display.draw();
 				display_target.draw(&rect_vertex_buffer, &rect_index_buffer, &post_program, &UniformsStorage::
 					 new("aspect_ratio", aspect_ratio)
+					.add("tile_depth_inverse", 1.0 / tile_depth)
 					.add("screen_texture", Sampler(&screen_texture, SamplerBehavior {
 						wrap_function: (SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp),
 						minify_filter: MinifySamplerFilter::Nearest,
