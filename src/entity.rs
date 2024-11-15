@@ -22,6 +22,7 @@ pub struct Entity {
     pub sprites: SpriteSet,
 	pub movement_input: Vec3<f64>,
 	pub jump_input: bool,
+	pub mesh_buffers: Option<(VertexBuffer<ModelVertex>, IndexBuffer<ModelIndex>)>,
 }
 
 pub enum SpriteSet {
@@ -70,6 +71,7 @@ impl Entity {
 			sprites,
 			movement_input: Vec3(0.0, 0.0, 0.0),
 			jump_input: false,
+			mesh_buffers: None,
 		}
 	}
 	
@@ -83,6 +85,21 @@ impl Entity {
 				FacingDirection::Right => &right,
 			}
 		}
+	}
+	
+	pub fn build_mesh_buffers(&mut self, display: &Display) {
+		let l = self.size.scale(LOW_CORNER).as_type();
+		let h = self.size.scale(HIGH_CORNER).as_type();
+		
+		self.mesh_buffers = Some((
+			VertexBuffer::new(display, &[
+				ModelVertex { position: Vec3(l.x(), l.y(), l.z() + 0.01), normal: Vec3::Z, uv: Vec2(0.0, 0.0) },
+				ModelVertex { position: Vec3(l.x(), h.y(), l.z() + 0.01), normal: Vec3::Z, uv: Vec2(0.0, 1.0) },
+				ModelVertex { position: Vec3(h.x(), h.y(), l.z() + 0.01), normal: Vec3::Z, uv: Vec2(1.0, 1.0) },
+				ModelVertex { position: Vec3(h.x(), l.y(), l.z() + 0.01), normal: Vec3::Z, uv: Vec2(1.0, 0.0) },
+			]).unwrap(),
+			IndexBuffer::new(display, PrimitiveType::TrianglesList, &[0, 1, 2, 0, 2, 3]).unwrap(),
+		));
 	}
 	
 	// pub fn movement(&mut self, mut input: Vec3<f64>) {

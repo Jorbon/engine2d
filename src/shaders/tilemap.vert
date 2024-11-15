@@ -3,8 +3,8 @@
 in vec3 position;
 in vec3 normal;
 in vec2 uv;
-flat out vec3 normal_;
-out vec2 uv_;
+flat out vec3 normalf;
+out vec2 uvf;
 
 uniform vec3 tile_size;
 uniform vec3 render_position;
@@ -12,8 +12,8 @@ uniform mat3 view_transform;
 uniform int first_person;
 
 void main() {
-	normal_ = normal;
-	uv_ = uv;
+	normalf = normal;
+	uvf = uv;
 	
 	vec3 pos = position + render_position;
 	pos.y *= -1;

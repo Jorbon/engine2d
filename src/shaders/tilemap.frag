@@ -1,17 +1,17 @@
 #version 150
 
-flat in vec3 normal_;
-in vec2 uv_;
+flat in vec3 normalf;
+in vec2 uvf;
 out vec4 color;
 out vec4 data;
 
-uniform sampler2D tilemap_texture;
-
-const float TEXTURE_DIMENSIONS = 16;
+uniform sampler2D tex;
 
 void main() {
-	vec3 c = texture(tilemap_texture, uv_ / TEXTURE_DIMENSIONS).rgb;
-	float shade = max(dot(normal_, normalize(vec3(2, 1, 3))), 0.4);
-	color = vec4(c * shade, 1.0);
+	vec4 c = texture(tex, uvf);
+	if (c.a < 0.1) discard;
+	
+	float shade = max(dot(normalf, normalize(vec3(2, 1, 3))), 0.4);
+	color = vec4(c.rgb * shade, c.a);
 	data = vec4(0, 0, 0, 0);
 }

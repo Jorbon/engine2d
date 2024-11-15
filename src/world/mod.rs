@@ -41,8 +41,8 @@ pub struct Cell {
 	pub tiles: Box<CellTiles>,
 	pub vertices: Vec<ModelVertex>,
 	pub indices: Vec<ModelIndex>,
-	pub buffers: Option<(VertexBuffer<ModelVertex>, IndexBuffer<ModelIndex>)>,
-	pub update_mesh: bool,
+	pub mesh_buffers: Option<(VertexBuffer<ModelVertex>, IndexBuffer<ModelIndex>)>,
+	pub update_mesh_buffers: bool,
 	pub unload: bool,
 }
 
@@ -99,8 +99,8 @@ impl World {
 			tiles,
 			vertices: vec![],
 			indices: vec![],
-			buffers: None,
-			update_mesh: false,
+			mesh_buffers: None,
+			update_mesh_buffers: false,
 			unload: false,
 		};
 		
@@ -128,14 +128,14 @@ impl World {
 		position.with_z(0.0)
 	}
 	
-	pub fn update_buffers(&mut self, display: &Display) {
+	pub fn update_mesh_buffers(&mut self, display: &Display) {
 		for (_location, cell) in &mut self.cells {
-			if cell.update_mesh {
-				cell.buffers = Some((
+			if cell.update_mesh_buffers {
+				cell.mesh_buffers = Some((
 					VertexBuffer::new(display, &cell.vertices).unwrap(),
 					IndexBuffer::new(display, PrimitiveType::TrianglesList, &cell.indices).unwrap(),
 				));
-				cell.update_mesh = false;
+				cell.update_mesh_buffers = false;
 			}
 		}
 	}

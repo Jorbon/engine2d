@@ -1,6 +1,8 @@
 use crate::*;
 
 
+const TILE_TEXTURE_ATLAS_SIZE: u32 = 16;
+
 const FACE_UVS: [Vec2<i8>; 4] = [
 	Vec2(0, 0),
 	Vec2(0, 1),
@@ -71,7 +73,7 @@ fn add_face(vertices: &mut Vec<ModelVertex>, indices: &mut Vec<ModelIndex>, pos:
 	vertices.append(&mut v.iter().map(|uv| ModelVertex {
 		position: pos + uv_to_face_mesh(*uv, d),
 		normal: Vec3::<f32>::unit(d),
-		uv: uv_corner + uv_unbleed(*uv),
+		uv: (uv_corner + uv_unbleed(*uv)) / TILE_TEXTURE_ATLAS_SIZE as f32,
 	}).collect());
 }
 
@@ -168,7 +170,7 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 				new_cell.vertices.push(ModelVertex {
 					position: pos + vertex,
 					normal: tile.direction.as_type::<f32>().normalize(),
-					uv: uv_corner + uv_unbleed(face_mesh_to_uv(vertex, uv_direction)),
+					uv: (uv_corner + uv_unbleed(face_mesh_to_uv(vertex, uv_direction))) / TILE_TEXTURE_ATLAS_SIZE as f32,
 				});
 			}
 		}
@@ -190,10 +192,10 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 				}
 			}
 			
-			other_cell.update_mesh = true;
+			other_cell.update_mesh_buffers = true;
 		}
 	}
 	
-	new_cell.update_mesh = true;
+	new_cell.update_mesh_buffers = true;
 }
 
