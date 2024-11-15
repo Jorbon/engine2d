@@ -60,7 +60,7 @@ impl World {
 			cells: HashMap::new(),
 			entities: vec![],
 			generator_settings: GeneratorSettings {
-				seed: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+				seed: (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() & (u64::MAX as u128)) as u64,
 				large_size: 64.0,
 				small_size: 4.0,
 				octave_size: 2.0,

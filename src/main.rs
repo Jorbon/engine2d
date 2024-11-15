@@ -1,6 +1,6 @@
 use std::{collections::HashMap, f32::consts::PI};
 
-use glium::{draw_parameters::DepthClamp, framebuffer::MultiOutputFrameBuffer, glutin::{dpi::PhysicalSize, event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent}, event_loop::{ControlFlow, EventLoop}, window::{Icon, WindowBuilder}, ContextBuilder}, index::PrimitiveType, texture::{DepthTexture2d, Texture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, BackfaceCullingMode, Blend, BlendingFunction, Depth, DepthTest, Display, DrawParameters, IndexBuffer, LinearBlendingFactor, Surface, VertexBuffer};
+use glium::{draw_parameters::DepthClamp, framebuffer::MultiOutputFrameBuffer, glutin::{dpi::{PhysicalPosition, PhysicalSize}, event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent}, event_loop::{ControlFlow, EventLoop}, window::{CursorGrabMode, Icon, WindowBuilder}, ContextBuilder}, index::PrimitiveType, texture::{DepthTexture2d, Texture2d}, uniforms::{MagnifySamplerFilter, MinifySamplerFilter, Sampler, SamplerBehavior, SamplerWrapFunction, UniformsStorage}, BackfaceCullingMode, Blend, BlendingFunction, Depth, DepthTest, Display, DrawParameters, IndexBuffer, LinearBlendingFactor, Surface, VertexBuffer};
 
 #[allow(dead_code)] mod math;
 #[allow(dead_code)] mod entity;
@@ -93,11 +93,13 @@ fn main() {
 	let mut key_l = false;
 	
 	let mut key_shift = false;
-	let mut key_ctrl = false;
+	let mut _key_ctrl = false;
 	let mut key_space = false;
 	
 	let mut u = 0.0f32;
 	let mut v = PI / 3.0;
+	
+	let mut first_person = false;
 	
 	let mut previous_frame_time = std::time::Instant::now();
 	
@@ -117,8 +119,17 @@ fn main() {
 					data_texture = Texture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
 					depth_texture = DepthTexture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
 				}
-				WindowEvent::CursorMoved { position: _, device_id: _, .. } => {
-					
+				WindowEvent::CursorMoved { position, device_id: _, .. } => {
+					if first_person {
+						let size = display.gl_window().window().inner_size();
+						let center_x = size.width / 2;
+						let center_y = size.height / 2;
+						u -= (position.x as f32 - center_x as f32) * 0.0015;
+						v += (position.y as f32 - center_y as f32) * 0.0015;
+						if v < -0.5*PI { v = -0.5*PI }
+						if v > 0.5*PI { v = 0.5*PI }
+						display.gl_window().window().set_cursor_position(PhysicalPosition::new(center_x, center_y)).unwrap();
+					}
 				}
 				WindowEvent::MouseInput { state, button, device_id: _, .. } => match button {
 					MouseButton::Left => if state == ElementState::Pressed {
@@ -136,21 +147,13 @@ fn main() {
 						VirtualKeyCode::A => key_a = state.is_pressed(),
 						VirtualKeyCode::D => key_d = state.is_pressed(),
 						VirtualKeyCode::LShift | VirtualKeyCode::RShift => key_shift = state.is_pressed(),
-						VirtualKeyCode::LControl | VirtualKeyCode::RControl => key_ctrl = state.is_pressed(),
+						VirtualKeyCode::LControl | VirtualKeyCode::RControl => _key_ctrl = state.is_pressed(),
 						VirtualKeyCode::Space => key_space = state.is_pressed(),
 						
-						VirtualKeyCode::Up => if state.is_pressed() {
-							world.entities[0].velocity.1 -= 30.0;
-						}
-						VirtualKeyCode::Down => if state.is_pressed() {
-							world.entities[0].velocity.1 += 30.0;
-						}
-						VirtualKeyCode::Left => if state.is_pressed() {
-							world.entities[0].velocity.0 -= 30.0;
-						}
-						VirtualKeyCode::Right => if state.is_pressed() {
-							world.entities[0].velocity.0 += 30.0;
-						}
+						VirtualKeyCode::Up    => if state.is_pressed() { world.entities[0].velocity += Vec3(-u.sin(), -u.cos(), 0.0).as_type::<f64>() * 30.0; }
+						VirtualKeyCode::Down  => if state.is_pressed() { world.entities[0].velocity += Vec3( u.sin(),  u.cos(), 0.0).as_type::<f64>() * 30.0; }
+						VirtualKeyCode::Left  => if state.is_pressed() { world.entities[0].velocity += Vec3(-u.cos(),  u.sin(), 0.0).as_type::<f64>() * 30.0; }
+						VirtualKeyCode::Right => if state.is_pressed() { world.entities[0].velocity += Vec3( u.cos(), -u.sin(), 0.0).as_type::<f64>() * 30.0; }
 						
 						VirtualKeyCode::Minus => if state.is_pressed() {
 							tile_size /= 1.1;
@@ -159,25 +162,38 @@ fn main() {
 							tile_size *= 1.1;
 						}
 						
+						VirtualKeyCode::F => if state.is_pressed() {
+							first_person = !first_person;
+							display.gl_window().window().set_cursor_grab(match first_person { true => CursorGrabMode::Confined, false => CursorGrabMode::None }).unwrap();
+							display.gl_window().window().set_cursor_visible(!first_person);
+						}
+						
+						VirtualKeyCode::R => if state.is_pressed() {
+							world.entities[0].velocity += Vec3(-u.sin()*v.cos(), -u.cos()*v.cos(), -v.sin()).as_type::<f64>() * 30.0;
+						}
+						
 						VirtualKeyCode::I => key_i = state.is_pressed(),
 						VirtualKeyCode::K => key_k = state.is_pressed(),
 						VirtualKeyCode::J => key_j = state.is_pressed(),
 						VirtualKeyCode::L => key_l = state.is_pressed(),
 						
-						VirtualKeyCode::R => if state.is_pressed() {
-							if key_ctrl {
-								tilemap_program = load_shader_program(&display, "tilemap", "tilemap");
-								post_program = load_shader_program(&display, "default", "post_process");
-							} else {
-								if key_shift {
-									let mut w = World::new();
-									w.entities.append(&mut world.entities.drain(0..=0).collect());
-									world = w;
-								}
-								
-								world.entities[0].position = world.place_player(Vec3(0.5, 0.5, CELL_HEIGHT as f64));
-								world.entities[0].velocity = Vec3(0.0, 0.0, 0.0);
+						VirtualKeyCode::F1 => if state.is_pressed() {
+							tilemap_program = load_shader_program(&display, "tilemap", "tilemap");
+							post_program = load_shader_program(&display, "default", "post_process");
+						}
+						
+						VirtualKeyCode::Grave => if state.is_pressed() {
+							if key_shift {
+								let mut w = World::new();
+								w.entities.append(&mut world.entities.drain(0..=0).collect());
+								world = w;
 							}
+							
+							world.entities[0].position = world.place_player(Vec3(0.5, 0.5, CELL_HEIGHT as f64));
+							world.entities[0].velocity = Vec3(0.0, 0.0, 0.0);
+							
+							u = 0.0f32;
+							v = PI / 3.0;
 						}
 						
 						VirtualKeyCode::P => if state.is_pressed() {
@@ -197,31 +213,39 @@ fn main() {
 				let dt = now.duration_since(previous_frame_time).as_secs_f64();
 				previous_frame_time = now;
 				
-				let cell_position = world.entities[0].position.scale_divide(CELL_SIZE.as_type::<f64>()) - Vec3(0.5, 0.5, 0.0);
+				
+				
+				let load_distance = 4.5;
+				let unload_distance = 4.75;
+				
+				let cell_position = world.entities[0].position.scale_divide(CELL_SIZE.as_type::<f64>()) - Vec3(0.5, 0.5, 0.5);
 				
 				for (pos, cell) in &mut world.cells {
-					if (pos.x() as f64 - cell_position.x()).abs() > 1.25
-					|| (pos.y() as f64 - cell_position.y()).abs() > 1.25 {
+					if (pos.x() as f64 - cell_position.x()).abs() > 0.5 + unload_distance
+					|| (pos.y() as f64 - cell_position.y()).abs() > 0.5 + unload_distance {
 						cell.unload = true;
 					}
 				}
 				
 				world.unload_flagged();
 				
-				for pos in Vec3Range::<isize, ZYX>::inclusive((cell_position - Vec3(0.0, 0.0, 0.0)).floor_to().with_z(0), (cell_position + Vec3(1.0, 1.0, 0.0)).floor_to().with_z(0)) {
+				for pos in Vec3Range::<isize, ZYX>::inclusive(
+					(cell_position + Vec3(0.5 - load_distance, 0.5 - load_distance, 0.0)).floor_to().with_z(0),
+					(cell_position + Vec3(0.5 + load_distance, 0.5 + load_distance, 0.0)).floor_to().with_z(0)
+				) {
 					world.get_or_load_cell(pos);
 				}
 				
 				
-				if key_i { v += 0.5*PI * dt as f32; if v > 0.5*PI { v = 0.5*PI } }
-				if key_k { v -= 0.5*PI * dt as f32; if v < -0.5*PI { v = -0.5*PI } }
+				if key_i { v -= 0.5*PI * dt as f32; if v < -0.5*PI { v = -0.5*PI } }
+				if key_k { v += 0.5*PI * dt as f32; if v > 0.5*PI { v = 0.5*PI } }
 				if key_j { u += 0.5*PI * dt as f32; }
 				if key_l { u -= 0.5*PI * dt as f32; }
 				
 				let view_matrix = Vec3(
 					Vec3(1.0, 0.0, 0.0),
-					Vec3(0.0, v.cos(), -v.sin()),
-					Vec3(0.0, v.sin(), v.cos()),
+					Vec3(0.0, v.sin(), -v.cos()),
+					Vec3(0.0, v.cos(), v.sin()),
 				).matmul(Vec3(
 					Vec3(u.cos(), -u.sin(), 0.0),
 					Vec3(u.sin(), u.cos(), 0.0),
@@ -230,10 +254,10 @@ fn main() {
 				
 				
 				let mut dp = Vec3(0.0, 0.0, 0.0f64);
-				if key_w { dp.1 -= 1.0; }
-				if key_s { dp.1 += 1.0; }
-				if key_a { dp.0 -= 1.0; }
-				if key_d { dp.0 += 1.0; }
+				if key_w { dp += Vec3(-u.sin(), -u.cos(), 0.0).as_type::<f64>(); }
+				if key_s { dp += Vec3( u.sin(),  u.cos(), 0.0).as_type::<f64>(); }
+				if key_a { dp += Vec3(-u.cos(),  u.sin(), 0.0).as_type::<f64>(); }
+				if key_d { dp += Vec3( u.cos(), -u.sin(), 0.0).as_type::<f64>(); }
 				world.entities[0].movement_input = dp.normalize_or_zero();
 				
 				world.entities[0].jump_input = key_space;
@@ -259,16 +283,20 @@ fn main() {
 					if let Some((vertex_buffer, index_buffer)) = &cell.buffers {
 						target.draw(vertex_buffer, index_buffer, &tilemap_program, &UniformsStorage::
 							 new("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))
-							.add("cell_position", (*location << CELL_SIZE_BITS).as_type::<f32>() - world.entities[0].position.as_type::<f32>())
+							.add("render_position", (*location << CELL_SIZE_BITS).as_type::<f32>() - (world.entities[0].position.as_type::<f32>() + match first_person {
+								false => Vec3::ZERO,
+								true => world.entities[0].size.component(Z).as_type::<f32>()
+							}))
 							.add("view_transform", view_matrix)
+							.add("first_person", match first_person { false => 0, true => 1 })
 							.add("tilemap_texture", Sampler(&tilemap_texture, SamplerBehavior {
 								wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
 								minify_filter: MinifySamplerFilter::Nearest,
 								magnify_filter: MagnifySamplerFilter::Nearest,
 								depth_texture_comparison: None,
 								max_anisotropy: 1,
-							}))
-						, &DrawParameters {
+							})),
+						&DrawParameters {
 							backface_culling: BackfaceCullingMode::CullClockwise,
 							blend: Blend {
 								color: BlendingFunction::Addition {
@@ -298,24 +326,21 @@ fn main() {
 					target.draw(&rect_vertex_buffer, &rect_index_buffer, &world_texture_program, &UniformsStorage::
 						 new("texture_position", entity.position.as_type::<f32>() + entity.size.scale(LOW_CORNER).as_type::<f32>().add_z(0.01))
 						.add("texture_size", entity.size.xy().as_type::<f32>())
-						.add("render_position", world.entities[0].position.as_type::<f32>())
+						.add("render_position", -(world.entities[0].position.as_type::<f32>() + match first_person {
+							false => Vec3::ZERO,
+							true => world.entities[0].size.component(Z).as_type::<f32>()
+						}))
 						.add("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))
 						.add("view_transform", view_matrix)
+						.add("first_person", match first_person { false => 0, true => 1 })
 						.add("tex", Sampler(entity.current_sprite(), SamplerBehavior {
 							wrap_function: (SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat, SamplerWrapFunction::Repeat),
 							minify_filter: MinifySamplerFilter::Linear,
 							magnify_filter: MagnifySamplerFilter::Nearest,
 							depth_texture_comparison: None,
 							max_anisotropy: 1,
-						}))
-						// .add("data_texture", Sampler(&data_texture, SamplerBehavior {
-						// 	wrap_function: (SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp, SamplerWrapFunction::Clamp),
-						// 	minify_filter: MinifySamplerFilter::Nearest,
-						// 	magnify_filter: MagnifySamplerFilter::Nearest,
-						// 	depth_texture_comparison: None,
-						// 	max_anisotropy: 1
-						// }))
-					, &DrawParameters {
+						})),
+					&DrawParameters {
 						blend: Blend::alpha_blending(),
 						depth: Depth {
 							test: DepthTest::IfMoreOrEqual,
@@ -370,8 +395,8 @@ fn main() {
 						magnify_filter: MagnifySamplerFilter::Nearest,
 						depth_texture_comparison: None,
 						max_anisotropy: 1
-					}))
-				, &DrawParameters::default()).unwrap();
+					})),
+				&DrawParameters::default()).unwrap();
 				
 				display_target.finish().unwrap();
 				

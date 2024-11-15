@@ -77,6 +77,14 @@ impl<T> Vec2<T> {
 		}
 	}
 	
+	pub fn vec3(self, plane: Axis) -> Vec3<T> where T: Default {
+		match plane {
+			X => Vec3(T::default(), self.0, self.1),
+			Y => Vec3(self.0, T::default(), self.1),
+			Z => Vec3(self.0, self.1, T::default()),
+		}
+	}
+	
 	pub fn with_x(self, v: T) -> Self { Self(v, self.1) }
 	pub fn with_y(self, v: T) -> Self { Self(self.0, v) }
 	pub fn with(self, axis: Axis, v: T) -> Self {
@@ -148,11 +156,6 @@ impl<T> Vec2<T> {
 	where
 		T: Signed
 	{ Self(self.0.abs(), self.1.abs() ) }
-	
-	pub fn vec3_xy(self) -> Vec3<T>
-	where
-		T: Default
-	{ Vec3(self.0, self.1, T::default()) }
 	
 	pub fn as_type<U>(self) -> Vec2<U>
 	where

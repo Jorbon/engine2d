@@ -10,7 +10,7 @@ pub struct Vec3<T>(pub T, pub T, pub T);
 
 impl<T: Debug> Debug for Vec3<T> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_tuple("Vec3").field(&self.0).field(&self.1).field(&self.2).finish()
+		f.write_fmt(format_args!("Vec3( {:?}, {:?}, {:?} )", &self.0, &self.1, &self.2))
 	}
 }
 
@@ -43,6 +43,14 @@ impl<T> Vec3<T> {
 	pub const fn zx(self) -> Vec2<T> where T: Copy { Vec2(self.2, self.0) }
 	pub const fn zy(self) -> Vec2<T> where T: Copy { Vec2(self.2, self.1) }
 	
+	pub fn get_plane(self, plane: Axis) -> Vec2<T> where T: Copy {
+		match plane {
+			Z => self.xy(),
+			Y => self.xz(),
+			X => self.yz(),
+		}
+	}
+	
 	pub const fn all(c: T) -> Self
 	where
 		T: Copy
@@ -73,17 +81,17 @@ impl<T> Vec3<T> {
 		}
 	}
 	
-	pub const fn positive_unit_pair(axis1: Axis, axis2: Axis) -> Self
-	where
-		T: ConstZero + ConstOne
-	{
-		match (axis1, axis2) {
-			(X, Y) | (Y, X) => Self::XY,
-			(X, Z) | (Z, X) => Self::XZ,
-			(Y, Z) | (Z, Y) => Self::YZ,
-			(X, X) | (Y, Y) | (Z, Z) => panic!("Duplicate axis passed to positive_unit_pair")
-		}
-	}
+	// pub const fn positive_unit_pair(axis1: Axis, axis2: Axis) -> Self
+	// where
+	// 	T: ConstZero + ConstOne
+	// {
+	// 	match (axis1, axis2) {
+	// 		(X, Y) | (Y, X) => Self::XY,
+	// 		(X, Z) | (Z, X) => Self::XZ,
+	// 		(Y, Z) | (Z, Y) => Self::YZ,
+	// 		(X, X) | (Y, Y) | (Z, Z) => panic!("Duplicate axis passed to positive_unit_pair")
+	// 	}
+	// }
 	
 	pub fn by_axis<F: FnMut(Axis) -> T>(mut f: F) -> Self {
 		Self(f(X), f(Y), f(Z))
@@ -114,6 +122,13 @@ impl<T> Vec3<T> {
 	pub fn with_xy(self, v: Vec2<T>) -> Self { Self(v.0, v.1, self.2) }
 	pub fn with_xz(self, v: Vec2<T>) -> Self { Self(v.0, v.1, self.2) }
 	pub fn with_yz(self, v: Vec2<T>) -> Self { Self(v.0, v.1, self.2) }
+	pub fn with_plane(self, plane: Axis, v: Vec2<T>) -> Self {
+		match plane {
+			Z => self.with_xy(v),
+			Y => self.with_xz(v),
+			X => self.with_yz(v),
+		}
+	}
 	
 	pub fn add_x<U>(self, v: U) -> Self where T: Add<U, Output = T> { Self(self.0 + v, self.1, self.2) }
 	pub fn add_y<U>(self, v: U) -> Self where T: Add<U, Output = T> { Self(self.0, self.1 + v, self.2) }

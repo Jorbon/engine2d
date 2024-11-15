@@ -80,6 +80,20 @@ pub fn generate_cell(tiles: &mut CellTiles, location: Vec3<isize>, gen: &Generat
 		for z in (height + 1)..gen.center.round() as usize {
 			tiles[pos.with_z(z)] = Tile::empty(Water);
 		}
+		
+		for z in 0..17 {
+			tiles[pos.with_z(z)] = Tile::full(materials[z]);
+		}
+		
+		if pos.x() % 4 == 0 && pos.y() % 4 == 0 {
+			let direction = (slope.with_z(-1.0) * -8.0).round_to();
+			tiles[pos.with_z(17 + (pos.x() % 8)/4)] = Tile {
+				material: Brick,
+				fluid: Air,
+				level: (direction.x() + direction.y() + direction.z()) / 2,
+				direction,
+			};
+		}
 	}
 }
 
