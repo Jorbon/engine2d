@@ -4,12 +4,14 @@ use glium::{draw_parameters::DepthClamp, framebuffer::MultiOutputFrameBuffer, gl
 
 #[allow(dead_code)] mod math;
 #[allow(dead_code)] mod entity;
+#[allow(dead_code)] mod physics;
 #[allow(dead_code)] mod graphics;
 #[allow(dead_code)] mod tiles;
 #[allow(dead_code)] mod world;
 
 use math::*;
 use entity::*;
+use physics::*;
 use graphics::*;
 use tiles::*;
 use world::*;
@@ -270,7 +272,7 @@ fn main() {
 				world.entities[0].jump_input = key_space;
 				
 				for entity in &mut world.entities {
-					entity.physics_step(&world.cells, dt);
+					physics_step(entity, &world.cells, dt);
 				}
 				
 				
