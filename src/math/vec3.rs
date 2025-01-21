@@ -176,7 +176,7 @@ impl<T> Vec3<T> {
 		U: Float + From<<<<T as Mul>::Output as Add>::Output as Add<<T as Mul>::Output>>::Output>
 	{ let f = self.length_as::<U>(); Vec3(self.0/f, self.1/f, self.2/f) }
 	
-	pub fn cross<U>(self, v: &Vec3<U>) -> Vec3<<<T as Mul<U>>::Output as Sub>::Output>
+	pub fn cross<U>(self, v: Vec3<U>) -> Vec3<<<T as Mul<U>>::Output as Sub>::Output>
 	where
 		T: Copy + Mul<U>,
 		<T as Mul<U>>::Output: Sub,

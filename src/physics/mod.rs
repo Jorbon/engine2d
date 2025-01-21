@@ -2,7 +2,7 @@
 
 use crate::*;
 
-fn get_force(entity: &Entity) -> Vec3<f64> {
+fn get_force(entity: &Entity) -> Vec3<f64> { // MARK: get_force
 	
 	// pub fn movement(&mut self, mut input: Vec3<f64>) {
 	// 	if input.is_zero() { return }
@@ -41,22 +41,10 @@ fn get_force(entity: &Entity) -> Vec3<f64> {
 
 const SURFACE_MARGIN: f64 = 1e-4;
 
-pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt: f64) {
-		
-	// First decide what surfaces the hitbox is in contact with
-	
-	let mut l = entity.position + entity.size.scale(LOW_CORNER);
-	let mut h = entity.position + entity.size.scale(HIGH_CORNER);
-	
-	let contacts = Vec3Range::<isize, ZYX>::inclusive(
-		(l - Vec3::all(SURFACE_MARGIN)).floor_to(),
-		(h + Vec3::all(SURFACE_MARGIN)).floor_to()
-	).map(|tile_pos| test_contact(l, h, cells, tile_pos)).flatten().collect::<Vec<_>>();
-	
-	// todo: resolve displacements smarter
-	for (normal, displacement) in &contacts {
-		entity.position += *normal * displacement;
-	}
+const MIN_V_BOUNCE: f64 = 0.1;
+
+
+pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt: f64, _debug: bool) { // MARK: Physics Step
 	
 	entity.velocity += get_force(entity) * dt;
 	
@@ -65,108 +53,58 @@ pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt:
 	else if entity.movement_input.x() < -entity.movement_input.y().abs() { entity.direction = FacingDirection::Left; }
 	else if entity.movement_input.x() >  entity.movement_input.y().abs() { entity.direction = FacingDirection::Right; }
 	
-	// todo: directional jumps
+	
+	let mut l = entity.position + entity.size.scale(LOW_CORNER);
+	let mut h = entity.position + entity.size.scale(HIGH_CORNER);
+	
+	let contacts = detect_contacts(cells, l, h);
+	
+	// todo: jump direction evaluation
 	if entity.jump_input {
 		for (normal, _) in &contacts {
 			entity.velocity += *normal * 5.0;
-			break;
+			break
 		}
 	}
 	
-	for (normal, _) in contacts {
-		if entity.velocity.dot(normal) < 0.0 {
-			entity.velocity -= normal * entity.velocity.dot(normal);
-		}
-	}
-	
-	
-	
-	// Main collider loop
-	
+	let mut contacts_iter = std::iter::once(contacts);
 	let mut dt_remaining = dt;
 	
 	loop {
 		
-		let mut first_collision = None;
-		let mut first_collision_t = dt_remaining;
-		
-		let reversed = entity.velocity.map(|v| v < 0.0);
-		let step = reversed.map(|r| match r { false => 1, true => -1 });
-		
-		let main_corner = entity.position + entity.size.scale(Vec3::by_axis(|a| match reversed[a] { false => HIGH_CORNER[a], true => LOW_CORNER[a] }));
-		let far_corner = entity.position + entity.size.scale(Vec3::by_axis(|a| match reversed[a] { false => LOW_CORNER[a], true => HIGH_CORNER[a] }));
-		
-		let mut main_tile = Vec3::by_axis(|a| match reversed[a] { false => main_corner[a].ceil() - 1.0, true => main_corner[a].floor() } as isize);
-		let far_tile = Vec3::by_axis(|a| match reversed[a] { false => far_corner[a].floor(), true => far_corner[a].ceil() - 1.0 } as isize);
-		
-		// Check tiles that the hitbox is already inside for faces in direction of movement
-		for (axis, check_axis) in [(Z, None), (Y, Some(Z)), (X, Some(Y))] {
-			if let Some(ca) = check_axis {
-				if main_tile[ca] == far_tile[ca] {
-					break
-				} else {
-					main_tile[ca] -= step[ca];
-				}
+		let contacts = match contacts_iter.next() {
+			Some(contacts) => contacts,
+			None => {
+				l = entity.position + entity.size.scale(LOW_CORNER);
+				h = entity.position + entity.size.scale(HIGH_CORNER);
+				detect_contacts(cells, l, h)
 			}
-			
-			// dbg!(self.position, main_tile, far_tile);
-			for tile_pos in Vec3Range::<isize, ZYX>::inclusive(main_tile, far_tile.with(axis, main_tile[axis])) {
-				if let Some(collision) = test_collision(l, h, entity.velocity, cells, tile_pos, first_collision_t) {
-					first_collision = Some(collision);
-					first_collision_t = collision.0;
-				}
-			}
+		};
+		
+		// todo: resolve displacements smarter
+		// if _debug { dbg!(&contacts); }
+		for (normal, displacement) in &contacts {
+			// entity.position += *normal * displacement;
 		}
 		
 		
-		// Next, visit each tile boundary encounter in chronological order
+		entity.velocity = constrain_velocity_with_contacts(entity.velocity, contacts.iter().map(|(normal, _)| *normal));
 		
-		let mut current_tile = main_corner.floor_to::<isize>();
-		let mut next_tile_boundary = current_tile + reversed.map(|r| if r {0} else {1});
 		
-		while first_collision.is_none() {
-			let t_next = Vec3::by_axis(|a| prel(main_corner[a], main_corner[a] + entity.velocity[a], next_tile_boundary[a] as f64)).map(|v| if v < 0.0 {f64::INFINITY} else {v});
-			let a = match (t_next.x() < t_next.y(), t_next.x() < t_next.z(), t_next.y() < t_next.z()) {
-				(true, true, _) => X,
-				(false, _, true) => Y,
-				(_, false, false) => Z,
-				_ => unreachable!()
-			};
-			
-			if t_next[a] > dt_remaining { break }
-			
-			current_tile += step.component(a);
-			next_tile_boundary += step.component(a);
-			
-			let current_t = t_next[a];
-			let current_main_pos = main_corner + entity.velocity * current_t;
-			let current_far_pos = far_corner + entity.velocity * current_t;
-			let mut main_tile = Vec3::by_axis(|a| match reversed[a] { false => current_main_pos[a].ceil() - 1.0, true => current_main_pos[a].floor() } as isize).with(a, current_tile[a]);
-			let far_tile = Vec3::by_axis(|a| match reversed[a] { false => current_far_pos[a].floor(), true => current_far_pos[a].ceil() - 1.0 } as isize).with(a, current_tile[a]);
-			
-			// Edge case will make current_tile farther than main_tile, use current_tile coord if it is moving into in that direction
-			// main_tile is less inclusive and allows smooth wall sliding (no velocity into wall)
-			// current_tile is more inclusive and fixes corner clip (velocity into tile)
-			if entity.velocity[a.l()] != 0.0 { main_tile[a.l()] = current_tile[a.l()] }
-			if entity.velocity[a.r()] != 0.0 { main_tile[a.r()] = current_tile[a.r()] }
-			
-			for tile_pos in Vec3Range::<isize, ZYX>::inclusive(main_tile, far_tile) {
-				if let Some(collision) = test_collision(l, h, entity.velocity, cells, tile_pos, first_collision_t) {
-					first_collision = Some(collision);
-					first_collision_t = collision.0;
-				}
-			}
-		}
-		
-		if let Some((t, normal)) = first_collision {
+		if let Some((t, normal)) = detect_next_collision(entity, cells, l, h, dt_remaining) {
 			entity.position += entity.velocity * t;
-			entity.velocity -= normal * entity.velocity.dot(normal) * 1.0;
+			
+			// if _debug { dbg!(t, normal, entity.velocity); }
+			
+			let bounce = 0.0;
+			
+			let v_projected = entity.velocity.dot(normal);
+			entity.velocity -= normal * v_projected * if v_projected < -MIN_V_BOUNCE {1.0 + bounce} else {1.0};
+			
 			dt_remaining -= t;
 			
-			l = entity.position + entity.size.scale(LOW_CORNER);
-			h = entity.position + entity.size.scale(HIGH_CORNER);
+			// if _debug { dbg!(entity.velocity); }
 			
-			// println!("{t}, {dt_remaining}, {normal:?}, {:?}", self.velocity);
 			continue
 		} else {
 			entity.position += entity.velocity * dt_remaining;
@@ -174,6 +112,143 @@ pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt:
 		}
 	}
 }
+
+
+// MARK: Constrain Contacts
+
+fn constrain_velocity_with_contacts(velocity: Vec3<f64>, contacts: impl Iterator<Item = Vec3<f64>>) -> Vec3<f64> {
+	let mut opposing: Vec<Vec3<f64>> = vec![];
+	let mut remainder = vec![];
+	for normal in contacts {
+		let list = if velocity.dot(normal) < 0.0 { &mut opposing } else { &mut remainder };
+		
+		let mut unique = true;
+		for other_normal in list.iter() {
+			if (normal.x() - other_normal.x()).abs() < 1e-7
+			&& (normal.y() - other_normal.y()).abs() < 1e-7
+			&& (normal.z() - other_normal.z()).abs() < 1e-7 {
+				unique = false;
+				break
+			}
+		}
+		
+		if unique {
+			list.push(normal);
+		}
+	}
+	
+	match opposing.len() {
+		0 => velocity,
+		1 => {
+			let normal1 = opposing[0];
+			let new_velocity = velocity - normal1 * velocity.dot(normal1);
+			
+			opposing = vec![];
+			let mut remainder2 = vec![];
+			for normal in remainder {
+				if new_velocity.dot(normal) < 0.0 {
+					opposing.push(normal);
+				} else {
+					remainder2.push(normal);
+				}
+			}
+			
+			match opposing.len() {
+				0 => new_velocity,
+				1 => {
+					let mut new_velocity_direction = normal1.cross(opposing[0]);
+					if velocity.dot(new_velocity_direction) < 0.0 {
+						new_velocity_direction = -new_velocity_direction;
+					}
+					
+					for normal in remainder2 {
+						if new_velocity_direction.dot(normal) < 0.0 {
+							return Vec3::ZERO
+						}
+					}
+					
+					new_velocity_direction * velocity.dot(new_velocity_direction) / new_velocity_direction.length_squared()
+				}
+				n => {
+					for i in 0..n {
+						let mut new_velocity_direction = normal1.cross(opposing[i]);
+						if velocity.dot(new_velocity_direction) < 0.0 {
+							new_velocity_direction = -new_velocity_direction;
+						}
+						
+						let mut valid = true;
+						for normal in opposing.iter().chain(remainder2.iter()) {
+							if normal == &opposing[i] { continue }
+							if new_velocity_direction.dot(*normal) < 0.0 {
+								valid = false;
+								break
+							}
+						}
+						
+						if valid {
+							return new_velocity_direction * velocity.dot(new_velocity_direction) / new_velocity_direction.length_squared()
+						}
+					}
+					
+					Vec3::ZERO
+				}
+			}
+			
+		}
+		2 => {
+			let mut new_velocity_direction = opposing[0].cross(opposing[1]);
+			if velocity.dot(new_velocity_direction) < 0.0 {
+				new_velocity_direction = -new_velocity_direction;
+			}
+			
+			for normal in remainder {
+				if new_velocity_direction.dot(normal) < 0.0 {
+					return Vec3::ZERO
+				}
+			}
+			
+			new_velocity_direction * velocity.dot(new_velocity_direction) / new_velocity_direction.length_squared()
+		}
+		n => {
+			for i in 0..n {
+				for j in ((i+1)..n).rev() {
+					let mut new_velocity_direction = opposing[i].cross(opposing[j]);
+					if velocity.dot(new_velocity_direction) < 0.0 {
+						new_velocity_direction = -new_velocity_direction;
+					}
+					
+					let mut valid = true;
+					for normal in opposing.iter().chain(remainder.iter()) {
+						if normal == &opposing[i] || normal == &opposing[j] { continue }
+						if new_velocity_direction.dot(*normal) < 0.0 {
+							valid = false;
+							break
+						}
+					}
+					
+					if valid {
+						return new_velocity_direction * velocity.dot(new_velocity_direction) / new_velocity_direction.length_squared()
+					}
+				}
+			}
+			
+			Vec3::ZERO
+		}
+	}
+}
+
+
+
+// MARK: Detect Contacts
+
+// Decide what surfaces the hitbox is in contact with
+fn detect_contacts(cells: &HashMap<Vec3<isize>, Cell>, l: Vec3<f64>, h: Vec3<f64>) -> Vec<(Vec3<f64>, f64)> {
+	Vec3Range::<isize, ZYX>::inclusive(
+		(l - Vec3::all(SURFACE_MARGIN)).floor_to(),
+		(h + Vec3::all(SURFACE_MARGIN)).floor_to()
+	).map(|tile_pos| test_contact(l, h, cells, tile_pos)).flatten().collect::<Vec<_>>()
+}
+
 
 fn test_contact(l: Vec3<f64>, h: Vec3<f64>, cells: &HashMap<Vec3<isize>, Cell>, tile_pos: Vec3<isize>) -> Vec<(Vec3<f64>, f64)> {
 	let cell_pos = tile_pos >> CELL_SIZE_BITS;
@@ -199,15 +274,15 @@ fn test_contact_full_block(l: Vec3<f64>, h: Vec3<f64>, tile_pos: Vec3<isize>) ->
 	let l_inset = tile_pos.as_type::<f64>() + Vec3(1.0, 1.0, 1.0) - l;
 	
 	for a in [Z, Y, X] {
-		// if h_inset[a.l()] > 0.0 && l_inset[a.l()] > 0.0
-		// && h_inset[a.r()] > 0.0 && l_inset[a.r()] > 0.0 {
+		if h_inset[a.l()] > 0.0 && l_inset[a.l()] > 0.0
+		&& h_inset[a.r()] > 0.0 && l_inset[a.r()] > 0.0 {
 			if h_inset[a].abs() < SURFACE_MARGIN {
 				return Some((a.n(), h_inset[a]));
 			}
 			if l_inset[a].abs() < SURFACE_MARGIN {
 				return Some((a.p(), l_inset[a]));
 			}
-		// }
+		}
 	}
 	
 	None
@@ -304,8 +379,88 @@ fn test_contact_slope(l: Vec3<f64>, h: Vec3<f64>, tile_pos: Vec3<isize>, directi
 }
 
 
+// MARK: Detect Next Collision
 
-pub fn test_collision(l: Vec3<f64>, h: Vec3<f64>, velocity: Vec3<f64>, cells: &HashMap<Vec3<isize>, Cell>, tile_pos: Vec3<isize>, max_t: f64) -> Option<(f64, Vec3<f64>)> {
+fn detect_next_collision(entity: &Entity, cells: &HashMap<Vec3<isize>, Cell>, l: Vec3<f64>, h: Vec3<f64>, dt_remaining: f64) -> Option<(f64, Vec3<f64>)> {
+	let mut first_collision = None;
+	let mut first_collision_t = dt_remaining;
+	
+	let reversed = entity.velocity.map(|v| v < 0.0);
+	let step = reversed.map(|r| match r { false => 1, true => -1 });
+	
+	let main_corner = entity.position + entity.size.scale(Vec3::by_axis(|a| match reversed[a] { false => HIGH_CORNER[a], true => LOW_CORNER[a] }));
+	let far_corner = entity.position + entity.size.scale(Vec3::by_axis(|a| match reversed[a] { false => LOW_CORNER[a], true => HIGH_CORNER[a] }));
+	
+	let mut main_tile = Vec3::by_axis(|a| match reversed[a] { false => main_corner[a].ceil() - 1.0, true => main_corner[a].floor() } as isize);
+	let far_tile = Vec3::by_axis(|a| match reversed[a] { false => far_corner[a].floor(), true => far_corner[a].ceil() - 1.0 } as isize);
+	
+	// Check tiles that the hitbox is already inside for faces in direction of movement
+	for (axis, check_axis) in [(Z, None), (Y, Some(Z)), (X, Some(Y))] {
+		if let Some(ca) = check_axis {
+			if main_tile[ca] == far_tile[ca] {
+				break
+			} else {
+				main_tile[ca] -= step[ca];
+			}
+		}
+		
+		// dbg!(self.position, main_tile, far_tile);
+		for tile_pos in Vec3Range::<isize, ZYX>::inclusive(main_tile, far_tile.with(axis, main_tile[axis])) {
+			if let Some(collision) = test_collision(l, h, entity.velocity, cells, tile_pos, first_collision_t) {
+				first_collision = Some(collision);
+				first_collision_t = collision.0;
+			}
+		}
+	}
+	
+	
+	// Next, visit each tile boundary encounter in chronological order
+	
+	let mut current_tile = main_corner.floor_to::<isize>();
+	let mut next_tile_boundary = current_tile + reversed.map(|r| if r {0} else {1});
+	
+	while first_collision.is_none() {
+		let t_next = Vec3::by_axis(|a| prel(main_corner[a], main_corner[a] + entity.velocity[a], next_tile_boundary[a] as f64)).map(|v| if v < 0.0 {f64::INFINITY} else {v});
+		let a = match (t_next.x() < t_next.y(), t_next.x() < t_next.z(), t_next.y() < t_next.z()) {
+			(true, true, _) => X,
+			(false, _, true) => Y,
+			(_, false, false) => Z,
+			_ => unreachable!()
+		};
+		
+		if t_next[a] > dt_remaining { break }
+		
+		current_tile += step.component(a);
+		next_tile_boundary += step.component(a);
+		
+		let current_t = t_next[a];
+		let current_main_pos = main_corner + entity.velocity * current_t;
+		let current_far_pos = far_corner + entity.velocity * current_t;
+		let mut main_tile = Vec3::by_axis(|a| match reversed[a] { false => current_main_pos[a].ceil() - 1.0, true => current_main_pos[a].floor() } as isize).with(a, current_tile[a]);
+		let far_tile = Vec3::by_axis(|a| match reversed[a] { false => current_far_pos[a].floor(), true => current_far_pos[a].ceil() - 1.0 } as isize).with(a, current_tile[a]);
+		
+		// Edge case will make current_tile farther than main_tile, use current_tile coord if it is moving into in that direction
+		// main_tile is less inclusive and allows smooth wall sliding (no velocity into wall)
+		// current_tile is more inclusive and fixes corner clip (velocity into tile)
+		if entity.velocity[a.l()] != 0.0 { main_tile[a.l()] = current_tile[a.l()] }
+		if entity.velocity[a.r()] != 0.0 { main_tile[a.r()] = current_tile[a.r()] }
+		
+		for tile_pos in Vec3Range::<isize, ZYX>::inclusive(main_tile, far_tile) {
+			if let Some(collision) = test_collision(l, h, entity.velocity, cells, tile_pos, first_collision_t) {
+				first_collision = Some(collision);
+				first_collision_t = collision.0;
+			}
+		}
+	}
+	
+	first_collision
+}
+
+
+
+// MARK: Test Collision
+
+fn test_collision(l: Vec3<f64>, h: Vec3<f64>, velocity: Vec3<f64>, cells: &HashMap<Vec3<isize>, Cell>, tile_pos: Vec3<isize>, max_t: f64) -> Option<(f64, Vec3<f64>)> {
 	let cell_pos = tile_pos >> CELL_SIZE_BITS;
 	if let Some(cell) = cells.get(&cell_pos) {
 		let tile = cell.tiles[(tile_pos & CELL_MASK).as_type()];

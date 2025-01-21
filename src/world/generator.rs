@@ -14,6 +14,20 @@ pub struct GeneratorSettings {
 
 pub fn generate_cell(tiles: &mut CellTiles, location: Vec3<isize>, gen: &GeneratorSettings) {
 	for pos in Vec3Range::<usize, ZYX>::exclusive(Vec3::ZERO, Vec3(CELL_WIDTH, CELL_WIDTH, 1)) {
+		
+		// tiles[pos.with_z(3)] = Tile::full(Grass);
+		// tiles[pos.with_z(2)] = Tile::full(Dirt);
+		// tiles[pos.with_z(1)] = Tile::full(Dirt);
+		// tiles[pos.with_z(0)] = Tile::full(Dirt);
+		
+		// tiles[pos.with_z(4)] = match pos {
+		// 	Vec3(0, 0, 0) => Tile { material: Brick, fluid: Air, level: 3, direction: Vec3(1, 1, 3) },
+		// 	Vec3(1, 0, 0) => Tile { material: Brick, fluid: Air, level: 2, direction: Vec3(-1, 1, 3) },
+		// 	Vec3(0, 1, 0) => Tile { material: Brick, fluid: Air, level: 2, direction: Vec3(1, -1, 3) },
+		// 	Vec3(1, 1, 0) => Tile { material: Brick, fluid: Air, level: 1, direction: Vec3(-1, -1, 3) },
+		// 	_ => Tile::empty(Air)
+		// };
+		
 		let tile_pos = (location << CELL_SIZE_BITS) + pos.as_type::<isize>();
 		
 		let mut height = 0.0;
@@ -81,19 +95,19 @@ pub fn generate_cell(tiles: &mut CellTiles, location: Vec3<isize>, gen: &Generat
 			tiles[pos.with_z(z)] = Tile::empty(Water);
 		}
 		
-		for z in 0..17 {
-			tiles[pos.with_z(z)] = Tile::full(materials[z]);
-		}
+		// for z in 0..17 {
+		// 	tiles[pos.with_z(z)] = Tile::full(materials[z]);
+		// }
 		
-		if pos.x() % 4 == 0 && pos.y() % 4 == 0 {
-			let direction = (slope.with_z(-1.0) * -8.0).round_to();
-			tiles[pos.with_z(17 + (pos.x() % 8)/4)] = Tile {
-				material: Brick,
-				fluid: Air,
-				level: (direction.x() + direction.y() + direction.z()) / 2,
-				direction,
-			};
-		}
+		// if pos.x() % 4 == 0 && pos.y() % 4 == 0 {
+		// 	let direction = (slope.with_z(-1.0) * -8.0).round_to();
+		// 	tiles[pos.with_z(17 + (pos.x() % 8)/4)] = Tile {
+		// 		material: Brick,
+		// 		fluid: Air,
+		// 		level: (direction.x() + direction.y() + direction.z()) / 2,
+		// 		direction,
+		// 	};
+		// }
 	}
 }
 

@@ -36,6 +36,9 @@ impl IsPressed for ElementState {
 
 
 fn main() {
+	
+	// MARK: Setup
+	
 	let event_loop = EventLoop::new();
 	let wb = WindowBuilder::new()
 		.with_title("balls")
@@ -63,7 +66,7 @@ fn main() {
 	let PhysicalSize { width: window_width, height: window_height } = display.gl_window().window().inner_size();
 	let mut aspect_ratio = window_width as f32 / window_height as f32;
 	
-	let mut tile_size = 1.0/40.0;
+	let mut tile_size = 1.0/30.0; //1.0/10.0;
 	let tile_depth = 1.0/128.0;
 	
 	let mut screen_texture = Texture2d::empty(&display, window_width, window_height).unwrap();
@@ -88,9 +91,21 @@ fn main() {
 	let mut key_space = false;
 	
 	let mut u = 0.0f32;
-	let mut v = PI / 3.0;
+	let mut v = 0.0f32;//PI / 3.0;
 	
-	let mut first_person = false;
+	
+	
+	let mut first_person = true;
+	
+	display.gl_window().window().set_cursor_grab(match first_person { true => CursorGrabMode::Confined, false => CursorGrabMode::None }).unwrap();
+	display.gl_window().window().set_cursor_visible(!first_person);
+	
+	if first_person {
+		let size = display.gl_window().window().inner_size();
+		let center_x = size.width / 2;
+		let center_y = size.height / 2;
+		display.gl_window().window().set_cursor_position(PhysicalPosition::new(center_x, center_y)).unwrap();
+	}
 	
 	
 	
@@ -99,13 +114,14 @@ fn main() {
 	let player_pos = world.place_player(Vec3(0.5, 0.5, CELL_HEIGHT as f64));
 	world.entities.push(Entity::new(
 		player_pos,
-		Vec3(0.75, 0.75, 0.75),
+		Vec3(0.70, 0.70, 1.75),
 		SpriteSet::load(&display, "player")
 	));
+	world.entities[0].show = false;
 	
 	for entity in &mut world.entities {
 		if entity.mesh_buffers.is_none() {
-			entity.build_mesh_buffers(&display);
+			entity.load_mesh_buffers(&display);
 		}
 	}
 	
@@ -118,16 +134,18 @@ fn main() {
 			Event::RedrawEventsCleared => {
 				display.gl_window().window().request_redraw();
 			}
-			Event::WindowEvent { event, window_id: _ } => match event {
+			Event::WindowEvent { event, window_id: _ } => match event { // MARK: Input
 				WindowEvent::CloseRequested => {
 					*control_flow = ControlFlow::Exit;
 				}
+				
 				WindowEvent::Resized(physical_size) => {
 					aspect_ratio = physical_size.width as f32 / physical_size.height as f32;
 					screen_texture = Texture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
 					data_texture = Texture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
 					depth_texture = DepthTexture2d::empty(&display, physical_size.width, physical_size.height).unwrap();
 				}
+				
 				WindowEvent::CursorMoved { position, device_id: _, .. } => {
 					if first_person {
 						let size = display.gl_window().window().inner_size();
@@ -140,15 +158,18 @@ fn main() {
 						display.gl_window().window().set_cursor_position(PhysicalPosition::new(center_x, center_y)).unwrap();
 					}
 				}
+				
 				WindowEvent::MouseInput { state, button, device_id: _, .. } => match button {
 					MouseButton::Left => if state == ElementState::Pressed {
 						// println!("click");
 					},
 					_ => ()
 				}
+				
 				WindowEvent::MouseWheel { device_id: _, delta: _, phase: _, .. } => {
 					
 				}
+				
 				WindowEvent::KeyboardInput { input: KeyboardInput { virtual_keycode: Some(keycode), state, scancode: _, .. }, device_id: _, is_synthetic: _} => {
 					match keycode {
 						VirtualKeyCode::W => key_w = state.is_pressed(),
@@ -217,7 +238,9 @@ fn main() {
 				}
 				_ => ()
 			}
-			Event::RedrawRequested(_) => {
+			
+			Event::RedrawRequested(_) => { // MARK: Timestep
+				
 				let now = std::time::Instant::now();
 				let dt = now.duration_since(previous_frame_time).as_secs_f64();
 				previous_frame_time = now;
@@ -225,7 +248,7 @@ fn main() {
 				
 				
 				let load_distance = 4.5;
-				let unload_distance = 4.75;
+				let unload_distance = 5.5;
 				
 				let cell_position = world.entities[0].position.scale_divide(CELL_SIZE.as_type::<f64>()) - Vec3(0.5, 0.5, 0.5);
 				
@@ -272,9 +295,10 @@ fn main() {
 				world.entities[0].jump_input = key_space;
 				
 				for entity in &mut world.entities {
-					physics_step(entity, &world.cells, dt);
+					physics_step(entity, &world.cells, 0.01, true);
 				}
 				
+				// if world.entities[0].position.x() > 0.65 { panic!() }
 				
 				
 				
@@ -294,7 +318,7 @@ fn main() {
 							 new("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))
 							.add("render_position", (*location << CELL_SIZE_BITS).as_type::<f32>() - (world.entities[0].position.as_type::<f32>() + match first_person {
 								false => Vec3::ZERO,
-								true => world.entities[0].size.component(Z).as_type::<f32>()
+								true => world.entities[0].size.component(Z).as_type::<f32>() * 0.8
 							}))
 							.add("view_transform", view_matrix)
 							.add("first_person", match first_person { false => 0, true => 1 })
@@ -337,7 +361,7 @@ fn main() {
 							 new("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))
 							.add("render_position", entity.position.as_type::<f32>() - (world.entities[0].position.as_type::<f32>() + match first_person {
 								false => Vec3::ZERO,
-								true => world.entities[0].size.component(Z).as_type::<f32>()
+								true => world.entities[0].size.component(Z).as_type::<f32>() * 0.8
 							}))
 							.add("view_transform", view_matrix)
 							.add("first_person", match first_person { false => 0, true => 1 })

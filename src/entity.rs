@@ -22,6 +22,7 @@ pub struct Entity {
     pub sprites: SpriteSet,
 	pub movement_input: Vec3<f64>,
 	pub jump_input: bool,
+	pub show: bool,
 	pub mesh_buffers: Option<(VertexBuffer<ModelVertex>, IndexBuffer<ModelIndex>)>,
 }
 
@@ -69,6 +70,7 @@ impl Entity {
 			sprites,
 			movement_input: Vec3(0.0, 0.0, 0.0),
 			jump_input: false,
+			show: true,
 			mesh_buffers: None,
 		}
 	}
@@ -85,7 +87,7 @@ impl Entity {
 		}
 	}
 	
-	pub fn build_mesh_buffers(&mut self, display: &Display) {
+	pub fn load_mesh_buffers(&mut self, display: &Display) {
 		let l = self.size.scale(LOW_CORNER).as_type();
 		let h = self.size.scale(HIGH_CORNER).as_type();
 		
