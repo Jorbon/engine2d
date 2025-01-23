@@ -117,13 +117,23 @@ fn main() {
 		Vec3(0.70, 0.70, 1.75),
 		SpriteSet::load(&display, "player")
 	));
-	world.entities[0].show = false;
+	// world.entities[0].show = false;
 	
 	for entity in &mut world.entities {
 		if entity.mesh_buffers.is_none() {
 			entity.load_mesh_buffers(&display);
 		}
 	}
+	
+	
+	
+	// let (tx_location, rx_location) = std::sync::mpsc::channel();
+	// let 
+	
+	
+	// let _generator_thread = std::thread::spawn(move || {
+		
+	// });
 	
 	
 	
@@ -269,6 +279,8 @@ fn main() {
 				}
 				
 				
+				
+				
 				if key_i { v -= 0.5*PI * dt as f32; if v < -0.5*PI { v = -0.5*PI } }
 				if key_k { v += 0.5*PI * dt as f32; if v > 0.5*PI { v = 0.5*PI } }
 				if key_j { u += 0.5*PI * dt as f32; }
@@ -295,7 +307,7 @@ fn main() {
 				world.entities[0].jump_input = key_space;
 				
 				for entity in &mut world.entities {
-					physics_step(entity, &world.cells, 0.01, true);
+					physics_step(entity, &world.cells, 0.01, key_shift);
 				}
 				
 				// if world.entities[0].position.x() > 0.65 { panic!() }
@@ -356,6 +368,7 @@ fn main() {
 				
 				// MARK: Draw Entities
 				world.entities.iter().rev().for_each(|entity| {
+					if !entity.show { return }
 					if let Some((vertex_buffer, index_buffer)) = &entity.mesh_buffers {
 						target.draw(vertex_buffer, index_buffer, &world_program, &UniformsStorage::
 							 new("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))

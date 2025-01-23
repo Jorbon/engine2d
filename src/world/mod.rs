@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use crate::*;
 
 pub mod perlin;

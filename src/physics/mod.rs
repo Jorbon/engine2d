@@ -46,6 +46,8 @@ const MIN_V_BOUNCE: f64 = 0.1;
 
 pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt: f64, _debug: bool) { // MARK: Physics Step
 	
+	if _debug { dbg!("step"); }
+	
 	entity.velocity += get_force(entity) * dt;
 	
 		 if entity.movement_input.y() < -entity.movement_input.x().abs() { entity.direction = FacingDirection::Up; }
@@ -83,12 +85,35 @@ pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt:
 		
 		// todo: resolve displacements smarter
 		// if _debug { dbg!(&contacts); }
-		for (normal, displacement) in &contacts {
-			// entity.position += *normal * displacement;
-		}
+		// for (normal, displacement) in &contacts {
+		// 	// entity.position += *normal * displacement;
+		// }
 		
+		let contacts = {
+			let mut filtered_contacts: Vec<Vec3<f64>> = vec![];
+			
+			for (normal, _) in contacts {
+				let mut unique = true;
+				for other_normal in &filtered_contacts {
+					if (normal.x() - other_normal.x()).abs() < 1e-7
+					&& (normal.y() - other_normal.y()).abs() < 1e-7
+					&& (normal.z() - other_normal.z()).abs() < 1e-7 {
+						unique = false;
+						break
+					}
+				}
+				
+				if unique {
+					filtered_contacts.push(normal);
+				}
+			}
+			
+			filtered_contacts
+		};
 		
-		entity.velocity = constrain_velocity_with_contacts(entity.velocity, contacts.iter().map(|(normal, _)| *normal));
+		// dbg!(entity.velocity, &contacts);
+		
+		entity.velocity = constrain_velocity(entity.velocity, contacts);
 		
 		
 		if let Some((t, normal)) = detect_next_collision(entity, cells, l, h, dt_remaining) {
@@ -116,125 +141,110 @@ pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt:
 
 // MARK: Constrain Contacts
 
-fn constrain_velocity_with_contacts(velocity: Vec3<f64>, contacts: impl Iterator<Item = Vec3<f64>>) -> Vec3<f64> {
+fn constrain_velocity(velocity: Vec3<f64>, contacts: Vec<Vec3<f64>>) -> Vec3<f64> {
 	let mut opposing: Vec<Vec3<f64>> = vec![];
 	let mut remainder = vec![];
 	for normal in contacts {
-		let list = if velocity.dot(normal) < 0.0 { &mut opposing } else { &mut remainder };
+		if velocity.dot(normal) < 0.0 {
+			opposing.push(normal);
+		} else {
+			remainder.push(normal);
+		}
+	}
+	
+	if opposing.len() == 0 {
+		return velocity
+	}
+	
+	for normal1 in &opposing {
+		let new_velocity = velocity - *normal1 * velocity.dot(*normal1);
 		
-		let mut unique = true;
-		for other_normal in list.iter() {
-			if (normal.x() - other_normal.x()).abs() < 1e-7
-			&& (normal.y() - other_normal.y()).abs() < 1e-7
-			&& (normal.z() - other_normal.z()).abs() < 1e-7 {
-				unique = false;
+		let mut valid = true;
+		for other_normal in &opposing {
+			if other_normal == normal1 { continue }
+			if new_velocity.dot(*other_normal) < 0.0 {
+				valid = false;
 				break
 			}
 		}
 		
-		if unique {
-			list.push(normal);
-		}
-	}
-	
-	match opposing.len() {
-		0 => velocity,
-		1 => {
-			let normal1 = opposing[0];
-			let new_velocity = velocity - normal1 * velocity.dot(normal1);
+		if valid {
+			let contacts = remainder;
+			let velocity = new_velocity;
 			
-			opposing = vec![];
-			let mut remainder2 = vec![];
-			for normal in remainder {
-				if new_velocity.dot(normal) < 0.0 {
+			let mut opposing: Vec<Vec3<f64>> = vec![];
+			let mut remainder = vec![];
+			for normal in contacts {
+				if velocity.dot(normal) < 0.0 {
 					opposing.push(normal);
 				} else {
-					remainder2.push(normal);
+					remainder.push(normal);
 				}
 			}
 			
-			match opposing.len() {
-				0 => new_velocity,
-				1 => {
-					let mut new_velocity_direction = normal1.cross(opposing[0]);
-					if velocity.dot(new_velocity_direction) < 0.0 {
-						new_velocity_direction = -new_velocity_direction;
+			if opposing.len() == 0 {
+				return velocity
+			}
+			
+			for normal2 in &opposing {
+				let mut new_velocity_direction = normal1.cross(*normal2);
+				if velocity.dot(new_velocity_direction) < 0.0 {
+					new_velocity_direction = -new_velocity_direction;
+				}
+				
+				let mut valid = true;
+				for other_normal in &opposing {
+					if other_normal == normal1 || other_normal == normal2 { continue }
+					if new_velocity_direction.dot(*other_normal) < 0.0 {
+						valid = false;
+						break
 					}
-					
-					for normal in remainder2 {
+				}
+				
+				if valid {
+					for normal in remainder {
 						if new_velocity_direction.dot(normal) < 0.0 {
 							return Vec3::ZERO
 						}
 					}
 					
-					new_velocity_direction * velocity.dot(new_velocity_direction) / new_velocity_direction.length_squared()
-				}
-				n => {
-					for i in 0..n {
-						let mut new_velocity_direction = normal1.cross(opposing[i]);
-						if velocity.dot(new_velocity_direction) < 0.0 {
-							new_velocity_direction = -new_velocity_direction;
-						}
-						
-						let mut valid = true;
-						for normal in opposing.iter().chain(remainder2.iter()) {
-							if normal == &opposing[i] { continue }
-							if new_velocity_direction.dot(*normal) < 0.0 {
-								valid = false;
-								break
-							}
-						}
-						
-						if valid {
-							return new_velocity_direction * velocity.dot(new_velocity_direction) / new_velocity_direction.length_squared()
-						}
-					}
-					
-					Vec3::ZERO
+					return new_velocity_direction * velocity.dot(new_velocity_direction) / new_velocity_direction.length_squared()
 				}
 			}
 			
+			return Vec3::ZERO
 		}
-		2 => {
-			let mut new_velocity_direction = opposing[0].cross(opposing[1]);
+	}
+	
+	for normal1 in &opposing {
+		for normal2 in opposing.iter().rev() {
+			let mut new_velocity_direction = normal1.cross(*normal2);
 			if velocity.dot(new_velocity_direction) < 0.0 {
 				new_velocity_direction = -new_velocity_direction;
 			}
 			
-			for normal in remainder {
-				if new_velocity_direction.dot(normal) < 0.0 {
-					return Vec3::ZERO
+			let mut valid = true;
+			for other_normal in &opposing {
+				if other_normal == normal1 || other_normal == normal2 { continue }
+				if new_velocity_direction.dot(*other_normal) < 0.0 {
+					valid = false;
+					break
 				}
 			}
 			
-			new_velocity_direction * velocity.dot(new_velocity_direction) / new_velocity_direction.length_squared()
-		}
-		n => {
-			for i in 0..n {
-				for j in ((i+1)..n).rev() {
-					let mut new_velocity_direction = opposing[i].cross(opposing[j]);
-					if velocity.dot(new_velocity_direction) < 0.0 {
-						new_velocity_direction = -new_velocity_direction;
-					}
-					
-					let mut valid = true;
-					for normal in opposing.iter().chain(remainder.iter()) {
-						if normal == &opposing[i] || normal == &opposing[j] { continue }
-						if new_velocity_direction.dot(*normal) < 0.0 {
-							valid = false;
-							break
-						}
-					}
-					
-					if valid {
-						return new_velocity_direction * velocity.dot(new_velocity_direction) / new_velocity_direction.length_squared()
+			if valid {
+				for normal in remainder {
+					if new_velocity_direction.dot(normal) < 0.0 {
+						return Vec3::ZERO
 					}
 				}
+				
+				return new_velocity_direction * velocity.dot(new_velocity_direction) / new_velocity_direction.length_squared()
 			}
-			
-			Vec3::ZERO
 		}
 	}
+	
+	Vec3::ZERO
 }
 
 
@@ -307,7 +317,6 @@ fn test_contact_slope(l: Vec3<f64>, h: Vec3<f64>, tile_pos: Vec3<isize>, directi
 	
 	// let h_inset = h - tile_pos.as_type::<f64>();
 	// let l_inset = tile_pos.as_type::<f64>() + Vec3(1.0, 1.0, 1.0) - l;
-	
 	
 	// Main slope face
 	for _ in std::iter::once(()) {

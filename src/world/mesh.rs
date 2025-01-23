@@ -93,9 +93,9 @@ fn tile_has_full_face(d: Direction, tile: Tile) -> bool {
 
 
 
-pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut HashMap<Vec3<isize>, Cell>) {
+pub fn build_cell_mesh(cell: &mut Cell, location: Vec3<isize>, cells: &mut HashMap<Vec3<isize>, Cell>) {
 	for pos in Vec3Range::<usize, ZYX>::exclusive(Vec3::ZERO, CELL_SIZE.as_type()) {
-		let tile = new_cell.tiles[pos];
+		let tile = cell.tiles[pos];
 		
 		if tile.is_empty() { continue }
 		
@@ -106,12 +106,12 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 					true => pos[d.axis()] < CELL_SIZE[d.axis()] as usize - 1,
 					false => pos[d.axis()] > 0,
 				} {
-					new_cell.tiles[(pos.as_type::<isize>() + Vec3::<isize>::unit(d)).as_type::<usize>()]
+					cell.tiles[(pos.as_type::<isize>() + Vec3::<isize>::unit(d)).as_type::<usize>()]
 				} else if let Some(other_cell) = cells.get(&(location + Vec3::<isize>::unit(d))) {
 					other_cell.tiles[pos.with(d.axis(), if d.is_positive() {0} else {CELL_SIZE[d.axis()] as usize - 1})]
 				} else { continue }
 			) {
-				add_face(&mut new_cell.vertices, &mut new_cell.indices, pos, d, tile);
+				add_face(&mut cell.vertices, &mut cell.indices, pos, d, tile);
 			}
 		}
 		
@@ -145,7 +145,7 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 			let pos = pos.as_type::<f32>();
 			let uv_corner = tile.material.get_uv().as_type::<f32>();
 			
-			let index_base = new_cell.vertices.len() as ModelIndex;
+			let index_base = cell.vertices.len() as ModelIndex;
 			let index_iter = match v.len() {
 				3 => [0, 1, 2].iter(),
 				4 => [0, 1, 2, 0, 2, 3].iter(),
@@ -154,7 +154,7 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 				n => panic!("{n} vertices on slope face")
 			};
 			
-			new_cell.indices.append(&mut match {
+			cell.indices.append(&mut match {
 				let mut reverse = true;
 				tile.direction.map(|v| if v < 0 { reverse = !reverse });
 				reverse
@@ -167,7 +167,7 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 			
 			for vertex in v {
 				let vertex = Vec3::by_axis(|a| if tile.direction[a] >= 0 {vertex[a]} else {1.0 - vertex[a]});
-				new_cell.vertices.push(ModelVertex {
+				cell.vertices.push(ModelVertex {
 					position: pos + vertex,
 					normal: tile.direction.as_type::<f32>().normalize(),
 					uv: (uv_corner + uv_unbleed(face_mesh_to_uv(vertex, uv_direction))) / TILE_TEXTURE_ATLAS_SIZE as f32,
@@ -187,7 +187,7 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 				let tile = other_cell.tiles[other_tile_pos];
 				if tile.is_empty() { continue }
 				
-				if !tile_has_full_face(-d, new_cell.tiles[this_tile_pos]) {
+				if !tile_has_full_face(-d, cell.tiles[this_tile_pos]) {
 					add_face(&mut other_cell.vertices, &mut other_cell.indices, other_tile_pos, d, tile);
 				}
 			}
@@ -196,6 +196,6 @@ pub fn build_cell_mesh(new_cell: &mut Cell, location: Vec3<isize>, cells: &mut H
 		}
 	}
 	
-	new_cell.update_mesh_buffers = true;
+	cell.update_mesh_buffers = true;
 }
 
