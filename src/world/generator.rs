@@ -21,10 +21,14 @@ pub fn generate_cell(tiles: &mut CellTiles, location: Vec3<isize>, gen: &Generat
 		tiles[pos.with_z(0)] = Tile::full(Dirt);
 		
 		tiles[pos.with_z(4)] = match pos {
-			Vec3(0, 0, 0) => Tile { material: Brick, fluid: Air, level: 6, direction: Vec3(0, 1, 8) },
-			Vec3(1, 0, 0) => Tile { material: Brick, fluid: Air, level: 6, direction: Vec3(-1, 2, 8) },
+			Vec3(0, 31, 0) => Tile { material: Brick, fluid: Air, level: 0, direction: Vec3(-3, 3, 15) },
+			Vec3(0, 30, 0) => Tile { material: Brick, fluid: Air, level: -3, direction: Vec3(-3, -3, 15) },
+			Vec3(1, 30, 0) => Tile { material: Brick, fluid: Air, level: 0, direction: Vec3(3, -3, 15) },
+			Vec3(1, 31, 0) => Tile { material: Brick, fluid: Air, level: 3, direction: Vec3(3, 3, 15) },
+			
 			// Vec3(0, 1, 0) => Tile { material: Brick, fluid: Air, level: 2, direction: Vec3(1, -1, 3) },
 			// Vec3(1, 1, 0) => Tile { material: Brick, fluid: Air, level: 1, direction: Vec3(-1, -1, 3) },
+			// Vec3(0, 31, 0) => Tile { material: Brick, fluid: Air, level: 8, direction: Vec3(0, 2, 8) },
 			_ => Tile::empty(Air)
 		};
 		
@@ -94,6 +98,7 @@ pub fn generate_cell(tiles: &mut CellTiles, location: Vec3<isize>, gen: &Generat
 		// for z in (height + 1)..gen.center.round() as usize {
 		// 	tiles[pos.with_z(z)] = Tile::empty(Water);
 		// }
+		
 		
 		// for z in 0..17 {
 		// 	tiles[pos.with_z(z)] = Tile::full(materials[z]);

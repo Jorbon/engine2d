@@ -44,9 +44,7 @@ const SURFACE_MARGIN: f64 = 1e-4;
 const MIN_V_BOUNCE: f64 = 0.1;
 
 
-pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt: f64, _debug: bool) { // MARK: Physics Step
-	
-	if _debug { dbg!("step"); }
+pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt: f64) { // MARK: Physics Step
 	
 	entity.velocity += get_force(entity) * dt;
 	
@@ -84,7 +82,6 @@ pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt:
 		};
 		
 		// todo: resolve displacements smarter
-		// if _debug { dbg!(&contacts); }
 		// for (normal, displacement) in &contacts {
 		// 	// entity.position += *normal * displacement;
 		// }
@@ -111,15 +108,15 @@ pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt:
 			filtered_contacts
 		};
 		
-		// dbg!(entity.velocity, &contacts);
-		
 		entity.velocity = constrain_velocity(entity.velocity, contacts);
 		
-		
 		if let Some((t, normal)) = detect_next_collision(entity, cells, l, h, dt_remaining) {
-			entity.position += entity.velocity * t;
+			if normal.z() < 0.2 {
+				dbg!(normal, entity.velocity);
+				panic!()
+			}
 			
-			// if _debug { dbg!(t, normal, entity.velocity); }
+			entity.position += entity.velocity * t;
 			
 			let bounce = 0.0;
 			
@@ -128,13 +125,12 @@ pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt:
 			
 			dt_remaining -= t;
 			
-			// if _debug { dbg!(entity.velocity); }
-			
 			continue
 		} else {
 			entity.position += entity.velocity * dt_remaining;
 			break
 		}
+		
 	}
 }
 
@@ -218,6 +214,8 @@ fn constrain_velocity(velocity: Vec3<f64>, contacts: Vec<Vec3<f64>>) -> Vec3<f64
 	
 	for normal1 in &opposing {
 		for normal2 in opposing.iter().rev() {
+			if normal1 == normal2 { continue }
+			
 			let mut new_velocity_direction = normal1.cross(*normal2);
 			if velocity.dot(new_velocity_direction) < 0.0 {
 				new_velocity_direction = -new_velocity_direction;
@@ -324,9 +322,9 @@ fn test_contact_slope(l: Vec3<f64>, h: Vec3<f64>, tile_pos: Vec3<isize>, directi
 		let s_inset = (slope_s - current_s) / slope_normal.length();
 		
 		if s_inset.abs() < SURFACE_MARGIN
-		&& near_corner.x() >= tile_pos.x() as f64 && near_corner.x() <= tile_pos.x() as f64 + 1.0
-		&& near_corner.y() >= tile_pos.y() as f64 && near_corner.y() <= tile_pos.y() as f64 + 1.0
-		&& near_corner.z() >= tile_pos.z() as f64 && near_corner.z() <= tile_pos.z() as f64 + 1.0 {
+		&& near_corner.x() + 1e-10 >= tile_pos.x() as f64 && near_corner.x() <= tile_pos.x() as f64 + 1.0 + 1e-10
+		&& near_corner.y() + 1e-10 >= tile_pos.y() as f64 && near_corner.y() <= tile_pos.y() as f64 + 1.0 + 1e-10
+		&& near_corner.z() + 1e-10 >= tile_pos.z() as f64 && near_corner.z() <= tile_pos.z() as f64 + 1.0 + 1e-10 {
 			return Some((slope_normal.normalize(), s_inset))
 		}
 	}
@@ -348,9 +346,9 @@ fn test_contact_slope(l: Vec3<f64>, h: Vec3<f64>, tile_pos: Vec3<isize>, directi
 		let plane_relative_position = if direction[a] >= 0 { plane_tile_pos } else { plane_tile_pos + 1 } as f64;
 		
 		if s_inset.abs() < SURFACE_MARGIN
-		&& near_edge.x() >= tile_pos.x() as f64 && near_edge.x() <= tile_pos.x() as f64 + 1.0
-		&& near_edge.y() >= tile_pos.y() as f64 && near_edge.y() <= tile_pos.y() as f64 + 1.0
-		&& plane_relative_position >= l[a] && plane_relative_position <= h[a] {
+		&& near_edge.x() + 1e-10 >= tile_pos.x() as f64 && near_edge.x() <= tile_pos.x() as f64 + 1.0 + 1e-10
+		&& near_edge.y() + 1e-10 >= tile_pos.y() as f64 && near_edge.y() <= tile_pos.y() as f64 + 1.0 + 1e-10
+		&& plane_relative_position > l[a] && plane_relative_position < h[a] {
 			return Some((edge_normal.normalize().vec3(a), s_inset))
 		}
 	}
@@ -369,8 +367,8 @@ fn test_contact_slope(l: Vec3<f64>, h: Vec3<f64>, tile_pos: Vec3<isize>, directi
 		);
 		
 		if s_inset.abs() < SURFACE_MARGIN
-		&& corner_relative_position.x() >= l[a.l()] && corner_relative_position.x() <= h[a.l()]
-		&& corner_relative_position.y() >= l[a.r()] && corner_relative_position.y() <= h[a.r()] {
+		&& corner_relative_position.x() > l[a.l()] && corner_relative_position.x() < h[a.l()]
+		&& corner_relative_position.y() > l[a.r()] && corner_relative_position.y() < h[a.r()] {
 			return Some((Vec3::unit(match direction[a] >= 0 { true => a.p(), false => a.n() }), s_inset))
 		}
 	}
@@ -379,8 +377,9 @@ fn test_contact_slope(l: Vec3<f64>, h: Vec3<f64>, tile_pos: Vec3<isize>, directi
 	let (d, displacement) = test_contact_full_block(l, h, tile_pos)?;
 	let a = d.axis();
 	let contacting_corner = near_corner.with(a, if d.is_positive() {l[a]} else {h[a]});
+	let contacting_point = Vec3::by_axis(|a| contacting_corner[a].clamp(tile_pos[a] as f64, tile_pos[a] as f64 + 1.0));
 	
-	if contacting_corner.dot(slope_normal) < slope_s {
+	if contacting_point.dot(slope_normal) + 1e-10 < slope_s {
 		Some((Vec3::unit(d), displacement))
 	} else {
 		None
@@ -413,7 +412,6 @@ fn detect_next_collision(entity: &Entity, cells: &HashMap<Vec3<isize>, Cell>, l:
 			}
 		}
 		
-		// dbg!(self.position, main_tile, far_tile);
 		for tile_pos in Vec3Range::<isize, ZYX>::inclusive(main_tile, far_tile.with(axis, main_tile[axis])) {
 			if let Some(collision) = test_collision(l, h, entity.velocity, cells, tile_pos, first_collision_t) {
 				first_collision = Some(collision);
@@ -518,7 +516,6 @@ fn test_collision_slope(l: Vec3<f64>, h: Vec3<f64>, velocity: Vec3<f64>, tile_po
 	let slope_normal = direction.as_type::<f64>();
 	let slope_s = (tile_pos.dot(direction.as_type::<isize>()) + level as isize) as f64;
 	
-	
 	// Main slope face
 	for _ in std::iter::once(()) {
 		let s_velocity = velocity.dot(slope_normal);
@@ -531,9 +528,9 @@ fn test_collision_slope(l: Vec3<f64>, h: Vec3<f64>, velocity: Vec3<f64>, tile_po
 		if t > max_t { return None }
 		
 		let near_corner_pos = near_corner + velocity * t;
-		if near_corner_pos.x() >= tile_pos.x() as f64 && near_corner_pos.x() <= tile_pos.x() as f64 + 1.0
-		&& near_corner_pos.y() >= tile_pos.y() as f64 && near_corner_pos.y() <= tile_pos.y() as f64 + 1.0
-		&& near_corner_pos.z() >= tile_pos.z() as f64 && near_corner_pos.z() <= tile_pos.z() as f64 + 1.0 {
+		if near_corner_pos.x() + 1e-10 >= tile_pos.x() as f64 && near_corner_pos.x() <= tile_pos.x() as f64 + 1.0 + 1e-10
+		&& near_corner_pos.y() + 1e-10 >= tile_pos.y() as f64 && near_corner_pos.y() <= tile_pos.y() as f64 + 1.0 + 1e-10
+		&& near_corner_pos.z() + 1e-10 >= tile_pos.z() as f64 && near_corner_pos.z() <= tile_pos.z() as f64 + 1.0 + 1e-10 {
 			return Some((t, slope_normal.normalize()));
 		}
 	}
@@ -562,9 +559,9 @@ fn test_collision_slope(l: Vec3<f64>, h: Vec3<f64>, velocity: Vec3<f64>, tile_po
 		let plane_relative_position = if direction[a] >= 0 { plane_tile_pos } else { plane_tile_pos + 1 } as f64 - velocity[a] * t;
 		let near_edge_pos = near_edge + plane_velocity * t;
 		
-		if near_edge_pos.x() >= tile_pos.x() as f64 && near_edge_pos.x() <= tile_pos.x() as f64 + 1.0
-		&& near_edge_pos.y() >= tile_pos.y() as f64 && near_edge_pos.y() <= tile_pos.y() as f64 + 1.0
-		&& plane_relative_position >= l[a] && plane_relative_position <= h[a] {
+		if near_edge_pos.x() + 1e-10 >= tile_pos.x() as f64 && near_edge_pos.x() <= tile_pos.x() as f64 + 1.0 + 1e-10
+		&& near_edge_pos.y() + 1e-10 >= tile_pos.y() as f64 && near_edge_pos.y() <= tile_pos.y() as f64 + 1.0 + 1e-10
+		&& plane_relative_position > l[a] && plane_relative_position < h[a] {
 			return Some((t, edge_normal.normalize().vec3(a)))
 		}
 	}
@@ -590,8 +587,8 @@ fn test_collision_slope(l: Vec3<f64>, h: Vec3<f64>, velocity: Vec3<f64>, tile_po
 		);
 		
 		if /*near_face_pos >= tile_pos[a] as f64 && near_face_pos <= tile_pos[a] as f64 + 1.0
-		&&*/ corner_relative_position.x() >= l[a.l()] && corner_relative_position.x() <= h[a.l()]
-		&& corner_relative_position.y() >= l[a.r()] && corner_relative_position.y() <= h[a.r()] {
+		&&*/ corner_relative_position.x() > l[a.l()] && corner_relative_position.x() < h[a.l()]
+		&& corner_relative_position.y() > l[a.r()] && corner_relative_position.y() < h[a.r()] {
 			return Some((t, Vec3::unit(match direction[a] >= 0 { true => a.p(), false => a.n() })))
 		}
 	}
@@ -600,8 +597,10 @@ fn test_collision_slope(l: Vec3<f64>, h: Vec3<f64>, velocity: Vec3<f64>, tile_po
 	let (t, d) = test_collision_full_block(l, h, velocity, tile_pos, max_t)?;
 	let a = d.axis();
 	let colliding_corner = near_corner.with(a, if d.is_positive() {l[a]} else {h[a]}) + velocity * t;
+	let colliding_point = Vec3::by_axis(|a| colliding_corner[a].clamp(tile_pos[a] as f64, tile_pos[a] as f64 + 1.0));
 	
-	if colliding_corner.dot(slope_normal) < slope_s {
+	if colliding_point.dot(slope_normal) + 1e-10 < slope_s {
+		dbg!("Full block!", slope_s - colliding_point.dot(slope_normal));
 		Some((t, Vec3::unit(d)))
 	} else {
 		None

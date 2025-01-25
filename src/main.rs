@@ -307,7 +307,7 @@ fn main() {
 				world.entities[0].jump_input = key_space;
 				
 				for entity in &mut world.entities {
-					physics_step(entity, &world.cells, 0.01, key_shift);
+					physics_step(entity, &world.cells, 0.01);
 				}
 				
 				// if world.entities[0].position.x() > 0.65 { panic!() }
