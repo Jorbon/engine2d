@@ -117,7 +117,7 @@ fn main() {
 		Vec3(0.70, 0.70, 1.75),
 		SpriteSet::load(&display, "player")
 	));
-	// world.entities[0].show = false;
+	world.entities[0].show = false;
 	
 	for entity in &mut world.entities {
 		if entity.mesh_buffers.is_none() {
@@ -161,8 +161,8 @@ fn main() {
 						let size = display.gl_window().window().inner_size();
 						let center_x = size.width / 2;
 						let center_y = size.height / 2;
-						u -= (position.x as f32 - center_x as f32) * 0.0015;
-						v += (position.y as f32 - center_y as f32) * 0.0015;
+						u -= (position.x as f32 - center_x as f32) * 0.0008;
+						v += (position.y as f32 - center_y as f32) * 0.0008;
 						if v < -0.5*PI { v = -0.5*PI }
 						if v > 0.5*PI { v = 0.5*PI }
 						display.gl_window().window().set_cursor_position(PhysicalPosition::new(center_x, center_y)).unwrap();
@@ -308,10 +308,10 @@ fn main() {
 				
 				for entity in &mut world.entities {
 					physics_step(entity, &world.cells, 0.01);
+					entity.update_sprite_status();
 				}
 				
 				// if world.entities[0].position.x() > 0.65 { panic!() }
-				
 				
 				
 				

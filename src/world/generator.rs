@@ -21,10 +21,10 @@ pub fn generate_cell(tiles: &mut CellTiles, location: Vec3<isize>, gen: &Generat
 		tiles[pos.with_z(0)] = Tile::full(Dirt);
 		
 		tiles[pos.with_z(4)] = match pos {
-			Vec3(0, 31, 0) => Tile { material: Brick, fluid: Air, level: 0, direction: Vec3(-3, 3, 15) },
-			Vec3(0, 30, 0) => Tile { material: Brick, fluid: Air, level: -3, direction: Vec3(-3, -3, 15) },
-			Vec3(1, 30, 0) => Tile { material: Brick, fluid: Air, level: 0, direction: Vec3(3, -3, 15) },
-			Vec3(1, 31, 0) => Tile { material: Brick, fluid: Air, level: 3, direction: Vec3(3, 3, 15) },
+			Vec3(0, 31, 0) => Tile { material: Brick, fluid: Air, level: 0, direction: Vec3(-3, 3, 6) },
+			Vec3(0, 30, 0) => Tile { material: Brick, fluid: Air, level: -3, direction: Vec3(-3, -3, 6) },
+			Vec3(1, 30, 0) => Tile { material: Brick, fluid: Air, level: 0, direction: Vec3(3, -3, 6) },
+			Vec3(1, 31, 0) => Tile { material: Brick, fluid: Air, level: 3, direction: Vec3(3, 3, 6) },
 			
 			// Vec3(0, 1, 0) => Tile { material: Brick, fluid: Air, level: 2, direction: Vec3(1, -1, 3) },
 			// Vec3(1, 1, 0) => Tile { material: Brick, fluid: Air, level: 1, direction: Vec3(-1, -1, 3) },

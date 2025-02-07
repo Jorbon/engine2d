@@ -75,6 +75,13 @@ impl Entity {
 		}
 	}
 	
+	pub fn update_sprite_status(&mut self) {
+		     if self.movement_input.y() < -self.movement_input.x().abs() { self.direction = FacingDirection::Up; }
+		else if self.movement_input.y() >  self.movement_input.x().abs() { self.direction = FacingDirection::Down; }
+		else if self.movement_input.x() < -self.movement_input.y().abs() { self.direction = FacingDirection::Left; }
+		else if self.movement_input.x() >  self.movement_input.y().abs() { self.direction = FacingDirection::Right; }
+	}
+	
 	pub fn current_sprite(&self) -> &SrgbTexture2d {
 		match &self.sprites {
 			SpriteSet::Static(sprite) => &sprite,
