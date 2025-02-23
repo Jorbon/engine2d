@@ -1,10 +1,15 @@
+mod constraints;
+mod contact;
 mod collision;
 mod movement;
 
+use constraints::ConstraintSet;
+
 use crate::*;
 
+
 fn get_force(entity: &Entity) -> Vec3<f64> { // MARK: get_force
-	movement::force_from_inputs(entity) + Vec3(0.0, 0.0, -9.8)
+	movement::force_from_inputs(entity) + Vec3(0.0, 0.0, -9.8) * entity.mass
 }
 
 
@@ -15,18 +20,18 @@ pub const MIN_V_BOUNCE: f64 = 0.1;
 
 pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt: f64) { // MARK: Physics Step
 	
-	entity.velocity += get_force(entity) * dt;
+	entity.velocity += get_force(entity) / entity.mass * dt;
 	
 	
 	let mut l = entity.position + entity.size.scale(LOW_CORNER);
 	let mut h = entity.position + entity.size.scale(HIGH_CORNER);
 	
-	let contacts = collision::detect_contacts(cells, l, h);
+	let contacts = contact::detect_contacts(cells, l, h);
 	
 	// todo: jump direction evaluation
 	if entity.jump_input {
-		for (normal, _) in &contacts {
-			entity.velocity += *normal * 5.0;
+		for contact in &contacts {
+			entity.velocity += contact.normal * 5.0;
 			break
 		}
 	}
@@ -42,7 +47,7 @@ pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt:
 			None => {
 				l = entity.position + entity.size.scale(LOW_CORNER);
 				h = entity.position + entity.size.scale(HIGH_CORNER);
-				collision::detect_contacts(cells, l, h)
+				contact::detect_contacts(cells, l, h)
 			}
 		};
 		
@@ -51,43 +56,45 @@ pub fn physics_step(entity: &mut Entity, cells: &HashMap<Vec3<isize>, Cell>, dt:
 		// 	// entity.position += *normal * displacement;
 		// }
 		
-		let contacts = {
-			let mut filtered_contacts: Vec<Vec3<f64>> = vec![];
-			
-			for (normal, _) in contacts {
-				let mut unique = true;
-				for other_normal in &filtered_contacts {
-					if (normal.x() - other_normal.x()).abs() < 1e-7
-					&& (normal.y() - other_normal.y()).abs() < 1e-7
-					&& (normal.z() - other_normal.z()).abs() < 1e-7 {
-						unique = false;
-						break
-					}
-				}
-				
-				if unique {
-					filtered_contacts.push(normal);
-				}
-			}
-			
-			filtered_contacts
-		};
 		
-		entity.velocity = collision::constrain_velocity(entity.velocity, contacts);
+		let (new_velocity, constraint_set) = constraints::find_constraints(entity.velocity, contacts);
+		entity.velocity = new_velocity;
 		
-		if let Some((t, normal)) = collision::detect_next_collision(entity, cells, l, h, dt_remaining) {
-			entity.position += entity.velocity * t;
+		
+		
+		
+		if let Some(collision) = collision::detect_next_collision(entity, cells, l, h, dt_remaining) {
+			entity.position += entity.velocity * collision.dt;
 			
-			let bounce = 0.0;
+			// todo: friction on collision and sub-step movement
 			
-			let v_projected = entity.velocity.dot(normal);
-			entity.velocity -= normal * v_projected * if v_projected < -MIN_V_BOUNCE {1.0 + bounce} else {1.0};
+			let v_projected = entity.velocity.dot(collision.normal);
+			entity.velocity -= collision.normal * v_projected * if v_projected < -MIN_V_BOUNCE {1.0 + collision.material.get_properties().bounciness} else {1.0};
 			
-			dt_remaining -= t;
+			dt_remaining -= collision.dt;
 			
 			continue
 		} else {
+			
+			// todo: unjank seriously
+			if let ConstraintSet::Single(constraint) = constraint_set {
+				
+				let speed = entity.velocity.length();
+				let friction_delta_v = (
+					constraint.material_properties.friction_constant + 
+					constraint.material_properties.friction_linear * speed
+				) * constraint.delta_v;
+				let new_speed = speed - friction_delta_v;
+				
+				if new_speed > 0.0 {
+					entity.velocity = entity.velocity.normalize() * new_speed;
+				} else {
+					entity.velocity = Vec3::ZERO;
+				}
+			}
+			
 			entity.position += entity.velocity * dt_remaining;
+			
 			break
 		}
 		

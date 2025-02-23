@@ -2,7 +2,7 @@ use crate::*;
 
 pub fn force_from_inputs(entity: &Entity) -> Vec3<f64> {
 	
-	entity.movement_input * 5.0
+	entity.movement_input * 3000.0
 	
 	// 	if input.is_zero() { return }
 		

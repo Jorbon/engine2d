@@ -1,3 +1,4 @@
+use num_traits::Zero;
 use crate::*;
 
 
@@ -18,9 +19,41 @@ pub enum Fluid {
 	Water,
 }
 
-use num_traits::Zero;
 pub use Material::*;
 pub use Fluid::*;
+
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct MaterialProperties {
+	pub friction_constant: f64, // "smooth" friction
+	pub friction_linear: f64, // "rough" friction
+	pub bounciness: f64, // Elasticity of collisions, 0 = no bounce, 1 = reflect velocity perfectly
+	pub stickiness: f64, // Additional force required to escape rest
+}
+
+impl Default for MaterialProperties {
+	fn default() -> Self {
+		Self {
+			friction_constant: 0.0,
+			friction_linear: 0.0,
+			bounciness: 0.0,
+			stickiness: 0.0,
+		}
+	}
+}
+
+impl MaterialProperties {
+	pub fn merge_with(self, other: Self) -> Self {
+		Self {
+			friction_constant: f64::max(self.friction_constant, other.friction_constant),
+			friction_linear: f64::max(self.friction_linear, other.friction_linear),
+			bounciness: f64::max(self.bounciness, other.bounciness),
+			stickiness: f64::max(self.stickiness, other.stickiness),
+		}
+	}
+}
+
+
 
 impl Material {
 	pub fn get_uv(&self) -> Vec2<u16> {
@@ -34,7 +67,18 @@ impl Material {
 			Tiles => Vec2(2, 1),
 		}
 	}
+	pub fn get_properties(&self) -> MaterialProperties {
+		MaterialProperties {
+			friction_constant: 0.5,
+			friction_linear: 0.5,
+			bounciness: 0.0,
+			stickiness: 0.0,
+		}
+	}
 }
+
+
+
 
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
