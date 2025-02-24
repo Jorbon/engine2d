@@ -3,7 +3,7 @@ use crate::*;
 pub mod perlin;
 pub mod generator;
 pub mod mesh;
-pub use perlin::*;
+// pub use perlin::*;
 pub use generator::*;
 pub use mesh::*;
 

@@ -2,6 +2,7 @@ mod constraints;
 mod contact;
 mod collision;
 mod movement;
+pub mod raycast;
 
 use constraints::ConstraintSet;
 

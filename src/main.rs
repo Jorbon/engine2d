@@ -56,11 +56,20 @@ fn main() {
 	
 	
 	let mut world_program = load_shader_program(&display, "tilemap", "tilemap");
+	let mut world_debug_program = load_shader_program(&display, "tilemap_debug", "tilemap_debug");
 	let _screen_texture_program = load_shader_program(&display, "screen_rectangle", "screen_rectangle");
 	let mut post_program = load_shader_program(&display, "default", "post_process");
 	
 	let rect_vertex_buffer = VertexBuffer::new(&display, &[Vec2(0.0f32, 0.0), Vec2(1.0, 0.0), Vec2(1.0, 1.0), Vec2(0.0, 1.0)]).unwrap();
 	let rect_index_buffer = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &[0, 1, 2, 0, 2, 3u8]).unwrap();
+	
+	
+	let oct_vertex_buffer = VertexBuffer::new(&display, &[NZ, PZ, NY, PY, NX, PX].map(|d| ModelDebugVertex {
+		position: Vec3::all(0.5).with(d.axis(), match d.is_positive() { true => 0.9, false => 0.1 }),
+		normal: Vec3::unit(d),
+		color: Vec3(1.0, 0.0, 0.0),
+	})).unwrap();
+	let oct_index_buffer = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &[0, 2, 5, 0, 5, 3, 0, 3, 4, 0, 4, 2, 1, 2, 4, 1, 4, 3, 1, 3, 5, 1, 5, 2u8]).unwrap();
 	
 	
 	let PhysicalSize { width: window_width, height: window_height } = display.gl_window().window().inner_size();
@@ -134,6 +143,8 @@ fn main() {
 	// let _generator_thread = std::thread::spawn(move || {
 		
 	// });
+	
+	let mut edit_position = None;
 	
 	
 	
@@ -209,7 +220,12 @@ fn main() {
 						}
 						
 						VirtualKeyCode::R => if state.is_pressed() {
-							world.entities[0].velocity += Vec3(-u.sin()*v.cos(), -u.cos()*v.cos(), -v.sin()).as_type::<f64>() * 30.0;
+							//world.entities[0].velocity += Vec3(-u.sin()*v.cos(), -u.cos()*v.cos(), -v.sin()).as_type::<f64>() * 30.0;
+							edit_position = crate::raycast::cast_ray(&world.cells, world.entities[0].position + world.entities[0].size.component(Z) * 0.8, Vec3(
+								-u.sin() * v.cos(),
+								-u.cos() * v.cos(),
+								-v.sin(),
+							).as_type::<f64>() * 12.0).map(|(tile_pos, _incidence)| tile_pos);
 						}
 						
 						VirtualKeyCode::I => key_i = state.is_pressed(),
@@ -219,6 +235,7 @@ fn main() {
 						
 						VirtualKeyCode::F1 => if state.is_pressed() {
 							world_program = load_shader_program(&display, "tilemap", "tilemap");
+							world_debug_program = load_shader_program(&display, "tilemap_debug", "tilemap_debug");
 							post_program = load_shader_program(&display, "default", "post_process");
 						}
 						
@@ -317,6 +334,25 @@ fn main() {
 				
 				world.update_mesh_buffers(&display);
 				
+				
+				
+				let draw_parameters = DrawParameters {
+					backface_culling: BackfaceCullingMode::CullClockwise,
+					blend: Blend {
+						color: BlendingFunction::Addition { source: LinearBlendingFactor::SourceAlpha, destination: LinearBlendingFactor::OneMinusSourceAlpha },
+						alpha: BlendingFunction::Addition { source: LinearBlendingFactor::One, destination: LinearBlendingFactor::OneMinusSourceAlpha },
+						constant_value: (0.0, 0.0, 0.0, 0.0),
+					},
+					depth: Depth {
+						test: DepthTest::IfMoreOrEqual,
+						write: true,
+						range: (0.0, 1.0),
+						clamp: DepthClamp::NoClamp,
+					},
+					.. Default::default()
+				};
+				
+				
 				let mut target = MultiOutputFrameBuffer::with_depth_buffer(&display, [
 					("color", &screen_texture),
 					("data", &data_texture),
@@ -330,7 +366,7 @@ fn main() {
 							 new("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))
 							.add("render_position", (*location << CELL_SIZE_BITS).as_type::<f32>() - (world.entities[0].position.as_type::<f32>() + match first_person {
 								false => Vec3::ZERO,
-								true => world.entities[0].size.component(Z).as_type::<f32>() * 0.8
+								true => world.entities[0].size.component(Z).as_type::<f32>() * 0.8,
 							}))
 							.add("view_transform", view_matrix)
 							.add("first_person", match first_person { false => 0, true => 1 })
@@ -341,27 +377,7 @@ fn main() {
 								depth_texture_comparison: None,
 								max_anisotropy: 1,
 							})),
-						&DrawParameters {
-							backface_culling: BackfaceCullingMode::CullClockwise,
-							blend: Blend {
-								color: BlendingFunction::Addition {
-									source: LinearBlendingFactor::SourceAlpha,
-									destination: LinearBlendingFactor::OneMinusSourceAlpha,
-								},
-								alpha: BlendingFunction::Addition {
-									source: LinearBlendingFactor::One,
-									destination: LinearBlendingFactor::OneMinusSourceAlpha,
-								},
-								constant_value: (0.0, 0.0, 0.0, 0.0)
-							},
-							depth: Depth {
-								test: DepthTest::IfMoreOrEqual,
-								write: true,
-								range: (0.0, 1.0),
-								clamp: DepthClamp::NoClamp,
-							},
-							.. Default::default()
-						}).unwrap();
+						&draw_parameters).unwrap();
 					}
 				}
 				
@@ -374,7 +390,7 @@ fn main() {
 							 new("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))
 							.add("render_position", entity.position.as_type::<f32>() - (world.entities[0].position.as_type::<f32>() + match first_person {
 								false => Vec3::ZERO,
-								true => world.entities[0].size.component(Z).as_type::<f32>() * 0.8
+								true => world.entities[0].size.component(Z).as_type::<f32>() * 0.8,
 							}))
 							.add("view_transform", view_matrix)
 							.add("first_person", match first_person { false => 0, true => 1 })
@@ -385,28 +401,36 @@ fn main() {
 								depth_texture_comparison: None,
 								max_anisotropy: 1,
 							})),
-						&DrawParameters {
-							blend: Blend {
-								color: BlendingFunction::Addition {
-									source: LinearBlendingFactor::SourceAlpha,
-									destination: LinearBlendingFactor::OneMinusSourceAlpha,
-								},
-								alpha: BlendingFunction::Addition {
-									source: LinearBlendingFactor::One,
-									destination: LinearBlendingFactor::OneMinusSourceAlpha,
-								},
-								constant_value: (0.0, 0.0, 0.0, 0.0)
-							},
-							depth: Depth {
-								test: DepthTest::IfMoreOrEqual,
-								write: true,
-								range: (0.0, 1.0),
-								clamp: DepthClamp::NoClamp,
-							},
-							..Default::default()
-						}).unwrap();
+						&draw_parameters).unwrap();
 					}
 				});
+				
+				
+				if let Some(edit_position) = edit_position {
+					target.draw(&oct_vertex_buffer, &oct_index_buffer, &world_debug_program, &UniformsStorage::
+						 new("tile_size", Vec3(tile_size, tile_size * aspect_ratio, tile_depth))
+						.add("render_position", edit_position.as_type::<f32>() - (world.entities[0].position.as_type::<f32>() + match first_person {
+							false => Vec3::ZERO,
+							true => world.entities[0].size.component(Z).as_type::<f32>() * 0.8,
+						}))
+						.add("view_transform", view_matrix)
+						.add("first_person", match first_person { false => 0, true => 1 }),
+					&DrawParameters {
+						backface_culling: BackfaceCullingMode::CullClockwise,
+						blend: Blend {
+							color: BlendingFunction::Addition { source: LinearBlendingFactor::SourceAlpha, destination: LinearBlendingFactor::OneMinusSourceAlpha },
+							alpha: BlendingFunction::Addition { source: LinearBlendingFactor::One, destination: LinearBlendingFactor::OneMinusSourceAlpha },
+							constant_value: (0.0, 0.0, 0.0, 0.0),
+						},
+						depth: Depth {
+							test: DepthTest::Overwrite,
+							write: false,
+							range: (0.0, 1.0),
+							clamp: DepthClamp::NoClamp,
+						},
+						.. Default::default()
+					}).unwrap();
+				}
 				
 				
 				// MARK: Debug noise renderer

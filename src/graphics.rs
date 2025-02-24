@@ -35,7 +35,7 @@ pub fn load_shader_program(display: &Display, vert_shader: &str, frag_shader: &s
     }).unwrap()
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy)]
 pub struct ModelVertex {
     pub position: Vec3<f32>,
     pub normal: Vec3<f32>,
@@ -44,4 +44,13 @@ pub struct ModelVertex {
 glium::implement_vertex!(ModelVertex, position, normal, uv);
 
 pub type ModelIndex = u32;
+
+#[derive(Clone, Copy)]
+pub struct ModelDebugVertex {
+    pub position: Vec3<f32>,
+    pub normal: Vec3<f32>,
+    pub color: Vec3<f32>,
+}
+glium::implement_vertex!(ModelDebugVertex, position, normal, color);
+
 

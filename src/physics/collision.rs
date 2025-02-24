@@ -11,6 +11,8 @@ pub struct Collision {
 
 // MARK: Detect Next Collision
 
+// Very similar to raycast algorithm, but different enough to not use raycast since it has to cover a whole volume
+
 pub fn detect_next_collision(entity: &Entity, cells: &HashMap<Vec3<isize>, Cell>, l: Vec3<f64>, h: Vec3<f64>, dt_remaining: f64) -> Option<Collision> {
 	let mut first_collision = None;
 	let mut first_collision_t = dt_remaining;
@@ -161,7 +163,7 @@ fn test_collision_slope(l: Vec3<f64>, h: Vec3<f64>, velocity: Vec3<f64>, tile_po
 		if near_corner_pos.x() + 1e-10 >= tile_pos.x() as f64 && near_corner_pos.x() <= tile_pos.x() as f64 + 1.0 + 1e-10
 		&& near_corner_pos.y() + 1e-10 >= tile_pos.y() as f64 && near_corner_pos.y() <= tile_pos.y() as f64 + 1.0 + 1e-10
 		&& near_corner_pos.z() + 1e-10 >= tile_pos.z() as f64 && near_corner_pos.z() <= tile_pos.z() as f64 + 1.0 + 1e-10 {
-			return Some((t, slope_normal.normalize()));
+			return Some((t, slope_normal.normalize()))
 		}
 	}
 	
